@@ -12,7 +12,7 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.22.1
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	github.com/hashicorp/terraform-plugin-testing v1.6.0
-	github.com/typesense/typesense-go/v3 v3.2.0
+	github.com/typesense/typesense-go/v4 v4.0.0-alpha2
 )
 
 require (

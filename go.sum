@@ -202,8 +202,8 @@ github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5
 github.com/stretchr/testify v1.7.2/go.mod h1:R6va5+xMeoiuVRoj+gSkQ7d3FALtqAAGI1FQKckRals=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
-github.com/typesense/typesense-go/v3 v3.2.0 h1:pmrq46PkxhS0xowPMCnfOcBYCbIfMESas45py4jk8LQ=
-github.com/typesense/typesense-go/v3 v3.2.0/go.mod h1:Jx4PAXe3jRx6sc032nhN9Aj+OvMoPtQJW6p1a6H4Zeg=
+github.com/typesense/typesense-go/v4 v4.0.0-alpha2 h1:L9icvEu+N9ARlmwh0eM3Cfc/zZLTNwn5nXS1Z4bztEk=
+github.com/typesense/typesense-go/v4 v4.0.0-alpha2/go.mod h1:Y880M+mG3T9jthku5MJBmfXrrc2wyE6ZotLOOADZx9Q=
 github.com/vmihailenco/msgpack v3.3.3+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=
 github.com/vmihailenco/msgpack v4.0.4+incompatible h1:dSLoQfGFAo3F6OoNhwUmLwVgaUXK79GlxNBwueZn0xI=
 github.com/vmihailenco/msgpack v4.0.4+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=

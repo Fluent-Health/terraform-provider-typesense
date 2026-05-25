@@ -13,7 +13,7 @@
 
 ## Support
 
-- Supports v28.0+ version of Typesense.
+- Supports Typesense v30.0+ (uses the global `synonym_sets` and `curation_sets` endpoints introduced in v30).
 
 ## Requirements
 
@@ -51,7 +51,8 @@ docker run -d --name typesense-test \
   -p 8108:8108 \
   -e TYPESENSE_DATA_DIR=/tmp \
   -e TYPESENSE_API_KEY=test-api-key \
-  typesense/typesense:29.0
+  -e TYPESENSE_ENABLE_SEARCH_ANALYTICS=true \
+  typesense/typesense:30.1
 
 # Wait for it to start
 sleep 5

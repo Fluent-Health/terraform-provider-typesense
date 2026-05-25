@@ -20,8 +20,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"github.com/typesense/typesense-go/v3/typesense"
-	"github.com/typesense/typesense-go/v3/typesense/api"
+	"github.com/typesense/typesense-go/v4/typesense"
+	"github.com/typesense/typesense-go/v4/typesense/api"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -80,23 +80,6 @@ type CollectionFieldEmbedModelConfigModel struct {
 	ProjectId      types.String `tfsdk:"project_id"`
 	QueryPrefix    types.String `tfsdk:"query_prefix"`
 	RefreshToken   types.String `tfsdk:"refresh_token"`
-}
-
-// fieldEmbedAPI mirrors the inline embed struct on api.Field.
-type fieldEmbedAPI = struct {
-	From        []string `json:"from"`
-	ModelConfig struct {
-		AccessToken    *string `json:"access_token,omitempty"`
-		ApiKey         *string `json:"api_key,omitempty"`
-		ClientId       *string `json:"client_id,omitempty"`
-		ClientSecret   *string `json:"client_secret,omitempty"`
-		IndexingPrefix *string `json:"indexing_prefix,omitempty"`
-		ModelName      string  `json:"model_name"`
-		ProjectId      *string `json:"project_id,omitempty"`
-		QueryPrefix    *string `json:"query_prefix,omitempty"`
-		RefreshToken   *string `json:"refresh_token,omitempty"`
-		Url            *string `json:"url,omitempty"`
-	} `json:"model_config"`
 }
 
 func (r *CollectionResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -740,12 +723,12 @@ func filedModelToApiField(field CollectionResourceFieldModel) api.Field {
 	return apiField
 }
 
-func fieldEmbedModelToAPI(embed *CollectionFieldEmbedModel) *fieldEmbedAPI {
+func fieldEmbedModelToAPI(embed *CollectionFieldEmbedModel) *api.FieldEmbed {
 	if embed == nil {
 		return nil
 	}
 
-	embedAPI := &fieldEmbedAPI{}
+	embedAPI := &api.FieldEmbed{}
 
 	if embed.From != nil {
 		from := make([]string, 0, len(embed.From))
@@ -773,7 +756,7 @@ func fieldEmbedModelToAPI(embed *CollectionFieldEmbedModel) *fieldEmbedAPI {
 	return embedAPI
 }
 
-func flattenFieldEmbed(embed *fieldEmbedAPI) *CollectionFieldEmbedModel {
+func flattenFieldEmbed(embed *api.FieldEmbed) *CollectionFieldEmbedModel {
 	if embed == nil {
 		return nil
 	}
