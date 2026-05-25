@@ -1,0 +1,1 @@
+terraform import typesense_preset.high_per_page high_per_page

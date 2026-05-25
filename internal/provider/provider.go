@@ -139,6 +139,7 @@ func (p *TypesenseProvider) Resources(_ context.Context) []func() resource.Resou
 		NewDocumentResource,
 		NewAliasResource,
 		NewApiKeyResource,
+		NewPresetResource,
 	}
 }
 
