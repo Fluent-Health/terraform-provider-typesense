@@ -145,6 +145,7 @@ func (p *TypesenseProvider) Resources(_ context.Context) []func() resource.Resou
 		NewSynonymSetResource,
 		NewCurationSetResource,
 		NewAnalyticsRuleResource,
+		NewConversationModelResource,
 	}
 }
 
