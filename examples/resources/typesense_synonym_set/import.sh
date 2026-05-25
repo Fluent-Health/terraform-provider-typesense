@@ -1,0 +1,1 @@
+terraform import typesense_synonym_set.clothing clothing
