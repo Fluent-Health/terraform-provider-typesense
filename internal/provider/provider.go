@@ -146,6 +146,7 @@ func (p *TypesenseProvider) Resources(_ context.Context) []func() resource.Resou
 		NewCurationSetResource,
 		NewAnalyticsRuleResource,
 		NewConversationModelResource,
+		NewNLSearchModelResource,
 	}
 }
 
