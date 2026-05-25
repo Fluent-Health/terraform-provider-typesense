@@ -1,7 +1,35 @@
 # Terraform Provider for Typesense — v30.1 Upgrade Design
 
 **Date:** 2026-05-25
-**Status:** Draft, pending review
+**Status:** Approved (with v4 SDK pivot, see Amendment below)
+
+## Amendment — 2026-05-25 (during execution)
+
+Live probing against `typesense/typesense:30.1` revealed that the `typesense-go`
+v3.2.0 SDK is **not transparently compatible** with Typesense v30. Specifically:
+
+- `/collections/{c}/synonyms` was **removed** in v30 (now `/synonym_sets`).
+- `/collections/{c}/overrides` was **removed** in v30 (now `/curation_sets`).
+- `/analytics/rules` schema **changed** — `event_type` is now required and the
+  whole shape was restructured.
+
+Effect: the existing `typesense_synonym` resource is **broken on v30**, and the
+planned `typesense_override` and `typesense_analytics_rule` (as written) would
+also fail. The fix requires upgrading to `typesense-go` v4.0.0-alpha2, which
+exposes the new global endpoints and updated analytics schema.
+
+Decision (user-confirmed during execution): **pivot to `typesense-go` v4.0.0-alpha2.**
+Because we are now on v4, the previously-deferred v29/v30-only resources come
+into scope:
+
+- `typesense_synonym_set` — replaces `typesense_synonym` (which is removed)
+- `typesense_curation_set` — replaces the previously planned `typesense_override`
+- `typesense_nl_search_model` — Natural Language Search models (v29 feature)
+
+The `typesense_analytics_rule` resource keeps its name but its schema is
+rebuilt against the v4 `AnalyticsRuleCreate` shape.
+
+This amendment supersedes the "Non-goals" list in the original design.
 
 ## Goal
 
