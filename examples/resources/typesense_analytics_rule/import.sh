@@ -1,0 +1,1 @@
+terraform import typesense_analytics_rule.popular popular_queries_rule
