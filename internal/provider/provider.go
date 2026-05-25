@@ -140,6 +140,7 @@ func (p *TypesenseProvider) Resources(_ context.Context) []func() resource.Resou
 		NewAliasResource,
 		NewApiKeyResource,
 		NewPresetResource,
+		NewStopwordResource,
 	}
 }
 

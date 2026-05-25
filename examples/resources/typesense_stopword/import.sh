@@ -1,0 +1,1 @@
+terraform import typesense_stopword.common_en common_en
