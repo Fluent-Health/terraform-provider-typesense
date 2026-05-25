@@ -848,3 +848,127 @@ resource "typesense_collection" "test" {
 }
 `, name, protected)
 }
+
+func TestAccCollectionResource_WithReference(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCollectionResourceConfigReference("ref_users", "ref_orders"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("typesense_collection.users", "name", "ref_users"),
+					resource.TestCheckResourceAttr("typesense_collection.orders", "name", "ref_orders"),
+					resource.TestCheckResourceAttr("typesense_collection.orders", "fields.#", "2"),
+				),
+			},
+		},
+	})
+}
+
+func testAccCollectionResourceConfigReference(usersName, ordersName string) string {
+	return fmt.Sprintf(`
+resource "typesense_collection" "users" {
+  name = %[1]q
+
+  fields {
+    name = "user_pk"
+    type = "string"
+  }
+
+  fields {
+    name = "email"
+    type = "string"
+  }
+}
+
+resource "typesense_collection" "orders" {
+  name = %[2]q
+
+  fields {
+    name = "order_pk"
+    type = "string"
+  }
+
+  fields {
+    name      = "user_pk"
+    type      = "string"
+    reference = "${typesense_collection.users.name}.user_pk"
+  }
+}
+`, usersName, ordersName)
+}
+
+func TestAccCollectionResource_WithVectorAndRange(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCollectionResourceConfigVectorRange("vec_range_coll"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("typesense_collection.test", "name", "vec_range_coll"),
+					resource.TestCheckResourceAttr("typesense_collection.test", "fields.#", "3"),
+				),
+			},
+		},
+	})
+}
+
+func testAccCollectionResourceConfigVectorRange(name string) string {
+	return fmt.Sprintf(`
+resource "typesense_collection" "test" {
+  name = %[1]q
+
+  fields {
+    name = "title"
+    type = "string"
+  }
+
+  fields {
+    name        = "rating"
+    type        = "float"
+    range_index = true
+    sort        = true
+  }
+
+  fields {
+    name     = "embedding"
+    type     = "float[]"
+    num_dim  = 4
+    vec_dist = "ip"
+  }
+}
+`, name)
+}
+
+func TestAccCollectionResource_FieldLevelSymbolsAndTokens(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCollectionResourceConfigFieldSymbols("field_symbols_coll"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("typesense_collection.test", "name", "field_symbols_coll"),
+					resource.TestCheckResourceAttr("typesense_collection.test", "fields.#", "1"),
+				),
+			},
+		},
+	})
+}
+
+func testAccCollectionResourceConfigFieldSymbols(name string) string {
+	return fmt.Sprintf(`
+resource "typesense_collection" "test" {
+  name = %[1]q
+
+  fields {
+    name             = "title"
+    type             = "string"
+    symbols_to_index = ["+", "-"]
+    token_separators = ["/"]
+  }
+}
+`, name)
+}

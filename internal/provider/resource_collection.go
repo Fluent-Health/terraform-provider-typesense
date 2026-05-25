@@ -49,19 +49,24 @@ type CollectionResourceModel struct {
 }
 
 type CollectionResourceFieldModel struct {
-	Name           types.String               `tfsdk:"name"`
-	Facet          types.Bool                 `tfsdk:"facet"`
-	Index          types.Bool                 `tfsdk:"index"`
-	Optional       types.Bool                 `tfsdk:"optional"`
-	Sort           types.Bool                 `tfsdk:"sort"`
-	Infix          types.Bool                 `tfsdk:"infix"`
-	Type           types.String               `tfsdk:"type"`
-	Stem           types.Bool                 `tfsdk:"stem"`
-	StemDictionary types.String               `tfsdk:"stem_dictionary"`
-	Locale         types.String               `tfsdk:"locale"`
-	Store          types.Bool                 `tfsdk:"store"`
-	NumDim         types.Int64                `tfsdk:"num_dim"`
-	Embed          *CollectionFieldEmbedModel `tfsdk:"embed"`
+	Name            types.String               `tfsdk:"name"`
+	Facet           types.Bool                 `tfsdk:"facet"`
+	Index           types.Bool                 `tfsdk:"index"`
+	Optional        types.Bool                 `tfsdk:"optional"`
+	Sort            types.Bool                 `tfsdk:"sort"`
+	Infix           types.Bool                 `tfsdk:"infix"`
+	Type            types.String               `tfsdk:"type"`
+	Stem            types.Bool                 `tfsdk:"stem"`
+	StemDictionary  types.String               `tfsdk:"stem_dictionary"`
+	Locale          types.String               `tfsdk:"locale"`
+	Store           types.Bool                 `tfsdk:"store"`
+	NumDim          types.Int64                `tfsdk:"num_dim"`
+	Reference       types.String               `tfsdk:"reference"`
+	RangeIndex      types.Bool                 `tfsdk:"range_index"`
+	VecDist         types.String               `tfsdk:"vec_dist"`
+	SymbolsToIndex  []types.String             `tfsdk:"symbols_to_index"`
+	TokenSeparators []types.String             `tfsdk:"token_separators"`
+	Embed           *CollectionFieldEmbedModel `tfsdk:"embed"`
 }
 
 type CollectionFieldEmbedModel struct {
@@ -225,6 +230,33 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 						"num_dim": schema.Int64Attribute{
 							Optional:    true,
 							Description: "Number of dimensions for vector fields (float[] type). Required for vector search.",
+						},
+						"reference": schema.StringAttribute{
+							Optional:    true,
+							Description: "Name of a field in another collection that should be linked to this collection so that it can be joined during query (e.g. \"users.id\").",
+						},
+						"range_index": schema.BoolAttribute{
+							Optional:    true,
+							Computed:    true,
+							Description: "Enables an index optimized for range filtering on numerical fields. Defaults to false.",
+						},
+						"vec_dist": schema.StringAttribute{
+							Optional:    true,
+							Computed:    true,
+							Description: "Distance metric for vector fields. One of `cosine` (default) or `ip` (inner product).",
+							Validators: []validator.String{
+								stringvalidator.OneOf("cosine", "ip"),
+							},
+						},
+						"symbols_to_index": schema.ListAttribute{
+							ElementType: types.StringType,
+							Optional:    true,
+							Description: "Field-level list of symbols/special characters to index (overrides collection-level setting).",
+						},
+						"token_separators": schema.ListAttribute{
+							ElementType: types.StringType,
+							Optional:    true,
+							Description: "Field-level list of token separator characters (overrides collection-level setting).",
 						},
 					},
 					Blocks: map[string]schema.Block{
@@ -487,6 +519,21 @@ func flattenCollectionFields(fields []api.Field) []CollectionResourceFieldModel 
 			field.Locale = stringPointerValueWithDefault(fieldResponse.Locale, "")
 			field.Store = boolPointerValueWithDefault(fieldResponse.Store, true)
 			field.NumDim = intPointerValue(fieldResponse.NumDim)
+			if fieldResponse.Reference != nil {
+				field.Reference = types.StringValue(*fieldResponse.Reference)
+			}
+			field.RangeIndex = boolPointerValueWithDefault(fieldResponse.RangeIndex, false)
+			field.VecDist = stringPointerValueWithDefault(fieldResponse.VecDist, "cosine")
+			if fieldResponse.SymbolsToIndex != nil {
+				for _, s := range *fieldResponse.SymbolsToIndex {
+					field.SymbolsToIndex = append(field.SymbolsToIndex, types.StringValue(s))
+				}
+			}
+			if fieldResponse.TokenSeparators != nil {
+				for _, s := range *fieldResponse.TokenSeparators {
+					field.TokenSeparators = append(field.TokenSeparators, types.StringValue(s))
+				}
+			}
 			if fieldResponse.Embed != nil {
 				field.Embed = flattenFieldEmbed(fieldResponse.Embed)
 			}
@@ -691,6 +738,14 @@ func (r *CollectionResource) ModifyPlan(ctx context.Context, req resource.Modify
 			plan.Fields[i].Store = types.BoolValue(true)
 			modified = true
 		}
+		if plan.Fields[i].RangeIndex.IsUnknown() || plan.Fields[i].RangeIndex.IsNull() {
+			plan.Fields[i].RangeIndex = types.BoolValue(false)
+			modified = true
+		}
+		if plan.Fields[i].VecDist.IsUnknown() || plan.Fields[i].VecDist.IsNull() {
+			plan.Fields[i].VecDist = types.StringValue("cosine")
+			modified = true
+		}
 	}
 
 	if modified {
@@ -711,11 +766,34 @@ func filedModelToApiField(field CollectionResourceFieldModel) api.Field {
 		StemDictionary: field.StemDictionary.ValueStringPointer(),
 		Locale:         field.Locale.ValueStringPointer(),
 		Store:          field.Store.ValueBoolPointer(),
+		Reference:      field.Reference.ValueStringPointer(),
+		RangeIndex:     field.RangeIndex.ValueBoolPointer(),
+		VecDist:        field.VecDist.ValueStringPointer(),
 	}
 
 	if !field.NumDim.IsNull() && !field.NumDim.IsUnknown() {
 		numDim := int(field.NumDim.ValueInt64())
 		apiField.NumDim = &numDim
+	}
+
+	if len(field.SymbolsToIndex) > 0 {
+		syms := make([]string, 0, len(field.SymbolsToIndex))
+		for _, s := range field.SymbolsToIndex {
+			if !s.IsNull() && !s.IsUnknown() {
+				syms = append(syms, s.ValueString())
+			}
+		}
+		apiField.SymbolsToIndex = &syms
+	}
+
+	if len(field.TokenSeparators) > 0 {
+		seps := make([]string, 0, len(field.TokenSeparators))
+		for _, s := range field.TokenSeparators {
+			if !s.IsNull() && !s.IsUnknown() {
+				seps = append(seps, s.ValueString())
+			}
+		}
+		apiField.TokenSeparators = &seps
 	}
 
 	apiField.Embed = fieldEmbedModelToAPI(field.Embed)
