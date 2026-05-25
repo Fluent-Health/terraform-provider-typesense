@@ -1,0 +1,1 @@
+terraform import typesense_stemming_dictionary.irregulars irregulars_en
