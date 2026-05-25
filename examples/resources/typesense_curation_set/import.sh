@@ -1,0 +1,1 @@
+terraform import typesense_curation_set.promotions promotions

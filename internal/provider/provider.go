@@ -143,6 +143,7 @@ func (p *TypesenseProvider) Resources(_ context.Context) []func() resource.Resou
 		NewStopwordResource,
 		NewStemmingDictionaryResource,
 		NewSynonymSetResource,
+		NewCurationSetResource,
 	}
 }
 
