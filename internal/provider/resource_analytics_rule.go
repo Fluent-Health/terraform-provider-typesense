@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"ronati-terraform-typesense/internal/typesense"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &AnalyticsRuleResource{}

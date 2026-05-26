@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"ronati-terraform-typesense/internal/typesense"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 // Ensure the implementation satisfies the expected interfaces.

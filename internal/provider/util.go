@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"ronati-terraform-typesense/internal/typesense"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 // configureClient pulls *typesense.Client out of req.ProviderData with the

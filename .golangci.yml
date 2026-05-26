@@ -78,7 +78,7 @@ formatters:
       simplify: true
     goimports:
       local-prefixes:
-        - ronati-terraform-typesense
+        - fluent-health-terraform-typesense
   exclusions:
     generated: lax
     paths:

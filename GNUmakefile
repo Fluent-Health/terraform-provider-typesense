@@ -10,4 +10,4 @@ build:
 	@go build
 install_linux: build
 	@mkdir -p /home/alexd/go/bin/plugins/$(provider_macos_path)
-	@mv ronati-terraform-typesense /home/alexd/go/bin/plugins/terraform-provider-typesense
+	@mv fluent-health-terraform-typesense /home/alexd/go/bin/plugins/terraform-provider-typesense

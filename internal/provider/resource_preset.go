@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"ronati-terraform-typesense/internal/typesense"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &PresetResource{}

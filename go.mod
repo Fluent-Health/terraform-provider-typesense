@@ -1,4 +1,4 @@
-module ronati-terraform-typesense
+module fluent-health-terraform-typesense
 
 go 1.24.0
 

@@ -19,7 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"ronati-terraform-typesense/internal/typesense"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
