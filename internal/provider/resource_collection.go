@@ -244,7 +244,8 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 						},
 						"async_reference": schema.BoolAttribute{
 							Optional:    true,
-							Description: "Allow documents to be indexed successfully even when the referenced document doesn't exist yet.",
+							Computed:    true,
+							Description: "Allow documents to be indexed successfully even when the referenced document doesn't exist yet. Only meaningful when `reference` is set.",
 						},
 						"range_index": schema.BoolAttribute{
 							Optional:    true,
@@ -783,7 +784,17 @@ func (r *CollectionResource) ModifyPlan(ctx context.Context, req resource.Modify
 			plan.Fields[i].VecDist = types.StringValue("cosine")
 			modified = true
 		}
-		if plan.Fields[i].AsyncReference.IsUnknown() {
+		// async_reference: server returns false-by-default for fields that have
+		// a reference; for non-reference fields the server omits it. Keep plan
+		// and state aligned so we don't get "provider produced inconsistent
+		// result after apply".
+		hasReference := !plan.Fields[i].Reference.IsNull() && !plan.Fields[i].Reference.IsUnknown() && plan.Fields[i].Reference.ValueString() != ""
+		if hasReference {
+			if plan.Fields[i].AsyncReference.IsUnknown() || plan.Fields[i].AsyncReference.IsNull() {
+				plan.Fields[i].AsyncReference = types.BoolValue(false)
+				modified = true
+			}
+		} else if plan.Fields[i].AsyncReference.IsUnknown() {
 			plan.Fields[i].AsyncReference = types.BoolNull()
 			modified = true
 		}

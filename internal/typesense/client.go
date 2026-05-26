@@ -17,7 +17,11 @@ import (
 	"time"
 )
 
-const defaultTimeout = 30 * time.Second
+// defaultTimeout caps a single HTTP request. Most Typesense calls return in
+// milliseconds, but collection-create with an `embed` field downloads/loads an
+// embedding model before responding — that can take several minutes on a cold
+// server. Default chosen to cover the slowest realistic case.
+const defaultTimeout = 5 * time.Minute
 
 // Client is a thin wrapper around net/http for talking to a Typesense server.
 type Client struct {
