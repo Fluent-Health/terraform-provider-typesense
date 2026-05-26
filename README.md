@@ -39,6 +39,8 @@ The provider talks to Typesense over plain HTTP (`internal/typesense` package) r
 - **`typesense_collection.fields.async_reference`** — index documents whose referenced row doesn't exist yet.
 - **`typesense_nl_search_model.service_account`** — same SA-based auth for Vertex-backed NL models (e.g. `gcp/gemini-2.5-flash`).
 
+Importing a collection that uses auto-embedding has a small extra wrinkle (Typesense never echoes sensitive credentials on `GET`, so the first plan after `terraform import` looks like a destructive drop+add but is actually a no-op against the server). See [Importing collections that use auto-embedding](./docs/resources/collection.md#importing-collections-that-use-auto-embedding) for the full story.
+
 ## Requirements
 
 - [Terraform](https://www.terraform.io/downloads.html) >= 0.12
