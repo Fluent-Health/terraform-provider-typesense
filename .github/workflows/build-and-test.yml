@@ -46,6 +46,12 @@ jobs:
         with:
           go-version: 1.22.x
 
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11"
+          terraform_wrapper: false
+
       - name: Wait for Typesense to be ready
         run: timeout 30 bash -c 'until curl -f http://localhost:8108/health > /dev/null 2>&1; do sleep 1; done'
 
