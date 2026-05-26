@@ -37,23 +37,25 @@ type FieldEmbed struct {
 // Region and ServiceAccount enable the GCP-Vertex service-account auth path
 // accepted by the Typesense server but missing from the OpenAPI spec and SDK.
 type FieldEmbedModelConfig struct {
-	ModelName      string                    `json:"model_name"`
-	Url            *string                   `json:"url,omitempty"`
-	AccessToken    *string                   `json:"access_token,omitempty"`
-	ApiKey         *string                   `json:"api_key,omitempty"`
-	ClientId       *string                   `json:"client_id,omitempty"`
-	ClientSecret   *string                   `json:"client_secret,omitempty"`
-	IndexingPrefix *string                   `json:"indexing_prefix,omitempty"`
-	ProjectId      *string                   `json:"project_id,omitempty"`
-	QueryPrefix    *string                   `json:"query_prefix,omitempty"`
-	RefreshToken   *string                   `json:"refresh_token,omitempty"`
-	Region         *string                   `json:"region,omitempty"`
-	ServiceAccount *FieldEmbedServiceAccount `json:"service_account,omitempty"`
+	ModelName      string             `json:"model_name"`
+	Url            *string            `json:"url,omitempty"`
+	AccessToken    *string            `json:"access_token,omitempty"`
+	ApiKey         *string            `json:"api_key,omitempty"`
+	ClientId       *string            `json:"client_id,omitempty"`
+	ClientSecret   *string            `json:"client_secret,omitempty"`
+	IndexingPrefix *string            `json:"indexing_prefix,omitempty"`
+	ProjectId      *string            `json:"project_id,omitempty"`
+	QueryPrefix    *string            `json:"query_prefix,omitempty"`
+	RefreshToken   *string            `json:"refresh_token,omitempty"`
+	Region         *string            `json:"region,omitempty"`
+	ServiceAccount *GCPServiceAccount `json:"service_account,omitempty"`
 }
 
-// FieldEmbedServiceAccount carries a GCP service-account credential used by the
-// embedder. token_uri defaults to Google's OAuth token endpoint if omitted.
-type FieldEmbedServiceAccount struct {
+// GCPServiceAccount carries a GCP service-account credential. Used by both
+// the collection embedder (FieldEmbedModelConfig.ServiceAccount) and the NL
+// search model (NLSearchModel.ServiceAccount). token_uri defaults to Google's
+// OAuth token endpoint if omitted.
+type GCPServiceAccount struct {
 	ClientEmail string  `json:"client_email"`
 	PrivateKey  string  `json:"private_key"`
 	TokenURI    *string `json:"token_uri,omitempty"`

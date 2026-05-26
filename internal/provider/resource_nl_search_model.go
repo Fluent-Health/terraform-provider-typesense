@@ -26,25 +26,34 @@ type NLSearchModelResource struct {
 }
 
 type NLSearchModelResourceModel struct {
-	Id              types.String   `tfsdk:"id"`
-	ModelName       types.String   `tfsdk:"model_name"`
-	ApiKey          types.String   `tfsdk:"api_key"`
-	ApiUrl          types.String   `tfsdk:"api_url"`
-	ApiVersion      types.String   `tfsdk:"api_version"`
-	SystemPrompt    types.String   `tfsdk:"system_prompt"`
-	MaxBytes        types.Int64    `tfsdk:"max_bytes"`
-	Temperature     types.Float64  `tfsdk:"temperature"`
-	TopK            types.Int64    `tfsdk:"top_k"`
-	TopP            types.Float64  `tfsdk:"top_p"`
-	MaxOutputTokens types.Int64    `tfsdk:"max_output_tokens"`
-	StopSequences   []types.String `tfsdk:"stop_sequences"`
-	AccountId       types.String   `tfsdk:"account_id"`
-	AccessToken     types.String   `tfsdk:"access_token"`
-	RefreshToken    types.String   `tfsdk:"refresh_token"`
-	ClientId        types.String   `tfsdk:"client_id"`
-	ClientSecret    types.String   `tfsdk:"client_secret"`
-	ProjectId       types.String   `tfsdk:"project_id"`
-	Region          types.String   `tfsdk:"region"`
+	Id              types.String            `tfsdk:"id"`
+	ModelName       types.String            `tfsdk:"model_name"`
+	ApiKey          types.String            `tfsdk:"api_key"`
+	ApiUrl          types.String            `tfsdk:"api_url"`
+	ApiVersion      types.String            `tfsdk:"api_version"`
+	SystemPrompt    types.String            `tfsdk:"system_prompt"`
+	MaxBytes        types.Int64             `tfsdk:"max_bytes"`
+	Temperature     types.Float64           `tfsdk:"temperature"`
+	TopK            types.Int64             `tfsdk:"top_k"`
+	TopP            types.Float64           `tfsdk:"top_p"`
+	MaxOutputTokens types.Int64             `tfsdk:"max_output_tokens"`
+	StopSequences   []types.String          `tfsdk:"stop_sequences"`
+	AccountId       types.String            `tfsdk:"account_id"`
+	AccessToken     types.String            `tfsdk:"access_token"`
+	RefreshToken    types.String            `tfsdk:"refresh_token"`
+	ClientId        types.String            `tfsdk:"client_id"`
+	ClientSecret    types.String            `tfsdk:"client_secret"`
+	ProjectId       types.String            `tfsdk:"project_id"`
+	Region          types.String            `tfsdk:"region"`
+	ServiceAccount  *GCPServiceAccountModel `tfsdk:"service_account"`
+}
+
+// GCPServiceAccountModel is the Terraform shape for a GCP service-account
+// credential, shared with the collection embed model_config block.
+type GCPServiceAccountModel struct {
+	ClientEmail types.String `tfsdk:"client_email"`
+	PrivateKey  types.String `tfsdk:"private_key"`
+	TokenURI    types.String `tfsdk:"token_uri"`
 }
 
 func (r *NLSearchModelResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -98,6 +107,26 @@ func (r *NLSearchModelResource) Schema(ctx context.Context, req resource.SchemaR
 			"project_id":    schema.StringAttribute{Optional: true, MarkdownDescription: "Project ID (GCP Vertex AI)."},
 			"region":        schema.StringAttribute{Optional: true, MarkdownDescription: "Region (GCP Vertex AI)."},
 		},
+		Blocks: map[string]schema.Block{
+			"service_account": schema.SingleNestedBlock{
+				MarkdownDescription: "GCP service-account credential. Alternative to the access_token/refresh_token/client_id/client_secret tuple; recommended for managed Vertex AI embedders since there's no refresh-token rotation.",
+				Attributes: map[string]schema.Attribute{
+					"client_email": schema.StringAttribute{
+						Optional:    true,
+						Description: "Service-account client_email (from the GCP credentials JSON).",
+					},
+					"private_key": schema.StringAttribute{
+						Optional:    true,
+						Sensitive:   true,
+						Description: "Service-account private_key PEM (from the GCP credentials JSON).",
+					},
+					"token_uri": schema.StringAttribute{
+						Optional:    true,
+						Description: "OAuth token endpoint. Defaults to https://oauth2.googleapis.com/token if omitted.",
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -143,6 +172,14 @@ func nlModelToCreateSchema(d *NLSearchModelResourceModel) *typesense.NLSearchMod
 	if len(d.StopSequences) > 0 {
 		ss := convertTerraformArrayToStringArray(d.StopSequences)
 		out.StopSequences = &ss
+	}
+	if sa := d.ServiceAccount; sa != nil &&
+		(!sa.ClientEmail.IsNull() || !sa.PrivateKey.IsNull() || !sa.TokenURI.IsNull()) {
+		out.ServiceAccount = &typesense.GCPServiceAccount{
+			ClientEmail: sa.ClientEmail.ValueString(),
+			PrivateKey:  sa.PrivateKey.ValueString(),
+			TokenURI:    sa.TokenURI.ValueStringPointer(),
+		}
 	}
 	return out
 }
@@ -190,6 +227,13 @@ func applyNLSchemaToModel(s *typesense.NLSearchModel, d *NLSearchModelResourceMo
 	}
 	if s.ClientId != nil {
 		d.ClientId = types.StringValue(*s.ClientId)
+	}
+	if s.ServiceAccount != nil {
+		d.ServiceAccount = &GCPServiceAccountModel{
+			ClientEmail: types.StringValue(s.ServiceAccount.ClientEmail),
+			PrivateKey:  types.StringValue(s.ServiceAccount.PrivateKey),
+			TokenURI:    types.StringPointerValue(s.ServiceAccount.TokenURI),
+		}
 	}
 	// api_key, access_token, refresh_token, client_secret are sensitive and not echoed; keep state values.
 }

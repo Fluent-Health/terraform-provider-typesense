@@ -87,10 +87,10 @@ resource "typesense_collection" "orders_eventual" {
   }
 
   fields {
-    name             = "user_pk"
-    type             = "string"
-    reference        = "${typesense_collection.users.name}.user_pk"
-    async_reference  = true
+    name            = "user_pk"
+    type            = "string"
+    reference       = "${typesense_collection.users.name}.user_pk"
+    async_reference = true
   }
 }
 

@@ -869,7 +869,7 @@ func fieldEmbedModelToAPI(embed *CollectionFieldEmbedModel) *typesense.FieldEmbe
 		embedAPI.ModelConfig.Region = embed.ModelConfig.Region.ValueStringPointer()
 		if sa := embed.ModelConfig.ServiceAccount; sa != nil &&
 			(!sa.ClientEmail.IsNull() || !sa.PrivateKey.IsNull() || !sa.TokenURI.IsNull()) {
-			embedAPI.ModelConfig.ServiceAccount = &typesense.FieldEmbedServiceAccount{
+			embedAPI.ModelConfig.ServiceAccount = &typesense.GCPServiceAccount{
 				ClientEmail: sa.ClientEmail.ValueString(),
 				PrivateKey:  sa.PrivateKey.ValueString(),
 				TokenURI:    sa.TokenURI.ValueStringPointer(),

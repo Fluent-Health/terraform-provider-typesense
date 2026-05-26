@@ -5,6 +5,7 @@
 * drop the `typesense-go` SDK and call the Typesense HTTP API directly via a new `internal/typesense` package. Removes a regen-cadence bottleneck and lets us expose server-supported fields the SDK is missing.
 * **collections (`embed.model_config`):** add `region` and `service_account` (with nested `client_email`, `private_key`, `token_uri`) — enables the GCP Vertex service-account auth path for embedders like LOINC/SNOMED.
 * **collections (`fields`):** add `async_reference` for fields that have a `reference`; lets documents index before the referenced document exists.
+* **nl_search_model:** add `service_account` block (same shape as on the collection embed); recommended auth path for managed Vertex AI models (e.g. `gcp/gemini-2.5-flash`) since it avoids refresh-token rotation.
 
 ### Internal
 
