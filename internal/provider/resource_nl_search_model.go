@@ -184,6 +184,26 @@ func nlModelToCreateSchema(d *NLSearchModelResourceModel) *typesense.NLSearchMod
 	return out
 }
 
+// setPreservingPriorReal copies the server pointer value into `d`, except
+// when the server returned its credential-masking pattern (see
+// isServerRedacted) and the prior value already held a real (non-masked,
+// non-null, non-unknown) string. Keeping the prior real value prevents
+// the "Provider produced inconsistent result after apply" error — the
+// plan promised "fh-dev-svc" so the post-apply state must not be
+// "fh-de*****". If the prior is null/unknown/itself-masked (fresh
+// import), the masked server value lands in state; the first user-
+// driven Update then overwrites it with the real HCL value.
+func setPreservingPriorReal(d *types.String, serverPtr *string) {
+	if serverPtr == nil {
+		return
+	}
+	serverVal := types.StringValue(*serverPtr)
+	if isServerRedacted(serverVal) && !d.IsNull() && !d.IsUnknown() && !isServerRedacted(*d) {
+		return
+	}
+	*d = serverVal
+}
+
 func applyNLSchemaToModel(s *typesense.NLSearchModel, d *NLSearchModelResourceModel) {
 	d.Id = types.StringValue(s.Id)
 	if s.ModelName != nil {
@@ -219,23 +239,29 @@ func applyNLSchemaToModel(s *typesense.NLSearchModel, d *NLSearchModelResourceMo
 	if s.AccountId != nil {
 		d.AccountId = types.StringValue(*s.AccountId)
 	}
-	if s.ProjectId != nil {
-		d.ProjectId = types.StringValue(*s.ProjectId)
-	}
-	if s.Region != nil {
-		d.Region = types.StringValue(*s.Region)
-	}
-	if s.ClientId != nil {
-		d.ClientId = types.StringValue(*s.ClientId)
-	}
+	// project_id, client_id, region: server may mask credential-like
+	// fields (project_id, client_id) — preserve the prior real value so
+	// the plan↔state contract isn't violated. region isn't observed as
+	// masked but going through the same helper keeps the pattern
+	// consistent if Typesense extends masking later.
+	setPreservingPriorReal(&d.ProjectId, s.ProjectId)
+	setPreservingPriorReal(&d.ClientId, s.ClientId)
+	setPreservingPriorReal(&d.Region, s.Region)
 	if s.ServiceAccount != nil {
-		d.ServiceAccount = &GCPServiceAccountModel{
-			ClientEmail: types.StringValue(s.ServiceAccount.ClientEmail),
-			PrivateKey:  types.StringValue(s.ServiceAccount.PrivateKey),
-			TokenURI:    types.StringPointerValue(s.ServiceAccount.TokenURI),
+		// client_email may come back masked; preserve any real prior.
+		// private_key is sensitive write-only — the server never echoes
+		// it, so always preserve the prior value rather than blanking
+		// state. token_uri isn't masked; take whatever the server sends.
+		if d.ServiceAccount == nil {
+			d.ServiceAccount = &GCPServiceAccountModel{}
 		}
+		clientEmail := s.ServiceAccount.ClientEmail
+		setPreservingPriorReal(&d.ServiceAccount.ClientEmail, &clientEmail)
+		d.ServiceAccount.TokenURI = types.StringPointerValue(s.ServiceAccount.TokenURI)
+		// PrivateKey: deliberately not touched — preserved from prior.
 	}
-	// api_key, access_token, refresh_token, client_secret are sensitive and not echoed; keep state values.
+	// api_key, access_token, refresh_token, client_secret are sensitive
+	// and not echoed; keep state values (function never assigns them).
 }
 
 func (r *NLSearchModelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
