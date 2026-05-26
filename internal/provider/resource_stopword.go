@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -12,8 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"ronati-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &StopwordResource{}
@@ -80,14 +78,14 @@ func (r *StopwordResource) Configure(ctx context.Context, req resource.Configure
 }
 
 func (r *StopwordResource) upsert(ctx context.Context, data *StopwordResourceModel) error {
-	body := &api.StopwordsSetUpsertSchema{
+	body := &typesense.StopwordsUpsertSchema{
 		Stopwords: convertTerraformArrayToStringArray(data.Stopwords),
 	}
 	if !data.Locale.IsNull() && data.Locale.ValueString() != "" {
 		loc := data.Locale.ValueString()
 		body.Locale = &loc
 	}
-	_, err := r.client.Stopwords().Upsert(ctx, data.Name.ValueString(), body)
+	_, err := r.client.UpsertStopwords(ctx, data.Name.ValueString(), body)
 	return err
 }
 
@@ -111,9 +109,9 @@ func (r *StopwordResource) Read(ctx context.Context, req resource.ReadRequest, r
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	set, err := r.client.Stopword(data.Id.ValueString()).Retrieve(ctx)
+	set, err := r.client.GetStopwords(ctx, data.Id.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -148,8 +146,8 @@ func (r *StopwordResource) Delete(ctx context.Context, req resource.DeleteReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := r.client.Stopword(data.Id.ValueString()).Delete(ctx)
-	if err != nil && !strings.Contains(err.Error(), "Not Found") {
+	err := r.client.DeleteStopwords(ctx, data.Id.ValueString())
+	if err != nil && !typesense.IsNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete stopword set: %s", err))
 	}
 }

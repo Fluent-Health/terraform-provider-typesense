@@ -14,8 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"ronati-terraform-typesense/internal/typesense"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -115,7 +114,7 @@ func (r *DocumentResource) Create(ctx context.Context, req resource.CreateReques
 
 	document["id"] = data.Name.ValueString()
 
-	result, err := r.client.Collection(data.CollectionName.ValueString()).Documents().Create(ctx, document, &api.DocumentIndexParameters{})
+	result, err := r.client.IndexDocument(ctx, data.CollectionName.ValueString(), document, nil)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create document, got error: %s", err))
@@ -130,7 +129,7 @@ func (r *DocumentResource) Create(ctx context.Context, req resource.CreateReques
 	data.Id = types.StringValue(createId(data.CollectionName.ValueString(), docId))
 
 	// Read back the document to ensure consistent JSON formatting
-	retrievedDoc, err := r.client.Collection(data.CollectionName.ValueString()).Document(docId).Retrieve(ctx)
+	retrievedDoc, err := r.client.GetDocument(ctx, data.CollectionName.ValueString(), docId)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to retrieve created document, got error: %s", err))
 		return
@@ -169,10 +168,10 @@ func (r *DocumentResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	result, err := r.client.Collection(collectionName).Document(id).Retrieve(ctx)
+	result, err := r.client.GetDocument(ctx, collectionName, id)
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			resp.Diagnostics.AddWarning("Resource Not Found", fmt.Sprintf("Unable to retrieve document, got error: %s", err))
 		} else {
@@ -227,7 +226,7 @@ func (r *DocumentResource) Update(ctx context.Context, req resource.UpdateReques
 
 	document["id"] = id
 
-	result, err := r.client.Collection(collectionName).Document(id).Update(ctx, document, &api.DocumentIndexParameters{})
+	result, err := r.client.UpdateDocument(ctx, collectionName, id, document, nil)
 	_ = result // result is empty
 
 	if err != nil {
@@ -263,10 +262,10 @@ func (r *DocumentResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	tflog.Warn(ctx, "###Delete Document with id="+data.Id.ValueString())
 
-	_, err := r.client.Collection(collectionName).Document(id).Delete(ctx)
+	err := r.client.DeleteDocument(ctx, collectionName, id)
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			resp.Diagnostics.AddWarning("Resource Not Found", fmt.Sprintf("Unable to delete document, got error: %s", err))
 		} else {

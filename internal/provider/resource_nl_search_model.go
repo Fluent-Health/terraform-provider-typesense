@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -12,8 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"ronati-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &NLSearchModelResource{}
@@ -116,8 +114,8 @@ func (r *NLSearchModelResource) Configure(ctx context.Context, req resource.Conf
 	r.client = client
 }
 
-func nlModelToCreateSchema(d *NLSearchModelResourceModel) *api.NLSearchModelCreateSchema {
-	out := &api.NLSearchModelCreateSchema{
+func nlModelToCreateSchema(d *NLSearchModelResourceModel) *typesense.NLSearchModelUpsertSchema {
+	out := &typesense.NLSearchModelUpsertSchema{
 		ModelName:    d.ModelName.ValueStringPointer(),
 		ApiKey:       d.ApiKey.ValueStringPointer(),
 		ApiUrl:       d.ApiUrl.ValueStringPointer(),
@@ -158,7 +156,7 @@ func nlModelToCreateSchema(d *NLSearchModelResourceModel) *api.NLSearchModelCrea
 	return out
 }
 
-func applyNLSchemaToModel(s *api.NLSearchModelSchema, d *NLSearchModelResourceModel) {
+func applyNLSchemaToModel(s *typesense.NLSearchModel, d *NLSearchModelResourceModel) {
 	d.Id = types.StringValue(s.Id)
 	if s.ModelName != nil {
 		d.ModelName = types.StringValue(*s.ModelName)
@@ -212,7 +210,7 @@ func (r *NLSearchModelResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 	body := nlModelToCreateSchema(&data)
-	model, err := r.client.NLSearchModels().Create(ctx, body)
+	model, err := r.client.CreateNLSearchModel(ctx, body)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create NL search model: %s", err))
 		return
@@ -227,9 +225,9 @@ func (r *NLSearchModelResource) Read(ctx context.Context, req resource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	model, err := r.client.NLSearchModel(data.Id.ValueString()).Retrieve(ctx)
+	model, err := r.client.GetNLSearchModel(ctx, data.Id.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") || strings.Contains(err.Error(), "not found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -246,9 +244,8 @@ func (r *NLSearchModelResource) Update(ctx context.Context, req resource.UpdateR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// NLSearchModelUpdateSchema is a Go type alias for NLSearchModelCreateSchema.
 	body := nlModelToCreateSchema(&data)
-	model, err := r.client.NLSearchModel(data.Id.ValueString()).Update(ctx, body)
+	model, err := r.client.UpdateNLSearchModel(ctx, data.Id.ValueString(), body)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update NL search model: %s", err))
 		return
@@ -263,8 +260,8 @@ func (r *NLSearchModelResource) Delete(ctx context.Context, req resource.DeleteR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := r.client.NLSearchModel(data.Id.ValueString()).Delete(ctx)
-	if err != nil && !strings.Contains(err.Error(), "Not Found") && !strings.Contains(err.Error(), "not found") {
+	err := r.client.DeleteNLSearchModel(ctx, data.Id.ValueString())
+	if err != nil && !typesense.IsNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete NL search model: %s", err))
 	}
 }

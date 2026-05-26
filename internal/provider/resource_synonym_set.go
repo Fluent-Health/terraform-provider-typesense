@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -12,8 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"ronati-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &SynonymSetResource{}
@@ -109,10 +107,10 @@ func (r *SynonymSetResource) Configure(ctx context.Context, req resource.Configu
 	r.client = client
 }
 
-func itemsToAPI(items []SynonymSetItemModel) []api.SynonymItemSchema {
-	out := make([]api.SynonymItemSchema, 0, len(items))
+func itemsToAPI(items []SynonymSetItemModel) []typesense.SynonymItem {
+	out := make([]typesense.SynonymItem, 0, len(items))
 	for _, item := range items {
-		apiItem := api.SynonymItemSchema{
+		apiItem := typesense.SynonymItem{
 			Id:       item.Id.ValueString(),
 			Synonyms: convertTerraformArrayToStringArray(item.Synonyms),
 		}
@@ -133,7 +131,7 @@ func itemsToAPI(items []SynonymSetItemModel) []api.SynonymItemSchema {
 	return out
 }
 
-func itemsFromAPI(items []api.SynonymItemSchema) []SynonymSetItemModel {
+func itemsFromAPI(items []typesense.SynonymItem) []SynonymSetItemModel {
 	out := make([]SynonymSetItemModel, 0, len(items))
 	for _, item := range items {
 		m := SynonymSetItemModel{
@@ -155,10 +153,10 @@ func itemsFromAPI(items []api.SynonymItemSchema) []SynonymSetItemModel {
 }
 
 func (r *SynonymSetResource) upsert(ctx context.Context, data *SynonymSetResourceModel) error {
-	body := &api.SynonymSetCreateSchema{
+	body := &typesense.SynonymSet{
 		Items: itemsToAPI(data.Items),
 	}
-	_, err := r.client.SynonymSet(data.Name.ValueString()).Upsert(ctx, body)
+	_, err := r.client.UpsertSynonymSet(ctx, data.Name.ValueString(), body)
 	return err
 }
 
@@ -182,9 +180,9 @@ func (r *SynonymSetResource) Read(ctx context.Context, req resource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	set, err := r.client.SynonymSet(data.Id.ValueString()).Retrieve(ctx)
+	set, err := r.client.GetSynonymSet(ctx, data.Id.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -216,8 +214,8 @@ func (r *SynonymSetResource) Delete(ctx context.Context, req resource.DeleteRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := r.client.SynonymSet(data.Id.ValueString()).Delete(ctx)
-	if err != nil && !strings.Contains(err.Error(), "Not Found") {
+	err := r.client.DeleteSynonymSet(ctx, data.Id.ValueString())
+	if err != nil && !typesense.IsNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete synonym set: %s", err))
 	}
 }

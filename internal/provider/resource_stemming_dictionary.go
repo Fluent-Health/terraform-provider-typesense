@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -13,8 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"ronati-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &StemmingDictionaryResource{}
@@ -93,15 +91,14 @@ func (r *StemmingDictionaryResource) Configure(ctx context.Context, req resource
 }
 
 func (r *StemmingDictionaryResource) upsert(ctx context.Context, data *StemmingDictionaryResourceModel) error {
-	words := make([]api.StemmingDictionaryWord, 0, len(data.Words))
+	words := make([]typesense.StemmingDictionaryWord, 0, len(data.Words))
 	for _, w := range data.Words {
-		words = append(words, api.StemmingDictionaryWord{
+		words = append(words, typesense.StemmingDictionaryWord{
 			Word: w.Word.ValueString(),
 			Root: w.Root.ValueString(),
 		})
 	}
-	_, err := r.client.Stemming().Dictionaries().Upsert(ctx, data.Name.ValueString(), words)
-	return err
+	return r.client.UpsertStemmingDictionary(ctx, data.Name.ValueString(), words)
 }
 
 func (r *StemmingDictionaryResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -124,9 +121,9 @@ func (r *StemmingDictionaryResource) Read(ctx context.Context, req resource.Read
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	dict, err := r.client.Stemming().Dictionary(data.Id.ValueString()).Retrieve(ctx)
+	dict, err := r.client.GetStemmingDictionary(ctx, data.Id.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}

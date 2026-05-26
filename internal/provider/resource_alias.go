@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -13,8 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"ronati-terraform-typesense/internal/typesense"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -99,9 +97,9 @@ func (r *AliasResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	body := &api.CollectionAliasSchema{CollectionName: data.CollectionName.ValueString()}
+	body := &typesense.AliasUpsertSchema{CollectionName: data.CollectionName.ValueString()}
 
-	alias, err := r.client.Aliases().Upsert(ctx, data.Name.ValueString(), body)
+	alias, err := r.client.UpsertAlias(ctx, data.Name.ValueString(), body)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create alias, got error: %s", err))
@@ -123,10 +121,10 @@ func (r *AliasResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	alias, err := r.client.Alias(data.Id.ValueString()).Retrieve(ctx)
+	alias, err := r.client.GetAlias(ctx, data.Id.ValueString())
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			resp.Diagnostics.AddWarning("Resource Not Found", fmt.Sprintf("Unable to find alias %s, removing from state", data.Id.ValueString()))
 		} else {
@@ -152,9 +150,9 @@ func (r *AliasResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
-	body := &api.CollectionAliasSchema{CollectionName: data.CollectionName.ValueString()}
+	body := &typesense.AliasUpsertSchema{CollectionName: data.CollectionName.ValueString()}
 
-	alias, err := r.client.Aliases().Upsert(ctx, data.Name.ValueString(), body)
+	alias, err := r.client.UpsertAlias(ctx, data.Name.ValueString(), body)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create alias, got error: %s", err))
@@ -179,10 +177,10 @@ func (r *AliasResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 
 	tflog.Warn(ctx, "###Delete alias with id="+data.Id.ValueString())
 
-	_, err := r.client.Alias(data.Id.ValueString()).Delete(ctx)
+	err := r.client.DeleteAlias(ctx, data.Id.ValueString())
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete alias, got error: %s", err))

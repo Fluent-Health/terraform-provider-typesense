@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -14,8 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"ronati-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &AnalyticsRuleResource{}
@@ -139,11 +137,11 @@ func (r *AnalyticsRuleResource) Configure(ctx context.Context, req resource.Conf
 	r.client = client
 }
 
-func paramsModelToAPI(p *AnalyticsRuleParamsModel) *api.AnalyticsRuleCreateParams {
+func paramsModelToAPI(p *AnalyticsRuleParamsModel) *typesense.AnalyticsRuleParams {
 	if p == nil {
 		return nil
 	}
-	out := &api.AnalyticsRuleCreateParams{
+	out := &typesense.AnalyticsRuleParams{
 		DestinationCollection: p.DestinationCollection.ValueStringPointer(),
 		CounterField:          p.CounterField.ValueStringPointer(),
 		ExpandQuery:           p.ExpandQuery.ValueBoolPointer(),
@@ -164,7 +162,7 @@ func paramsModelToAPI(p *AnalyticsRuleParamsModel) *api.AnalyticsRuleCreateParam
 	return out
 }
 
-func paramsAPIToModel(p *api.AnalyticsRuleCreateParams) *AnalyticsRuleParamsModel {
+func paramsAPIToModel(p *typesense.AnalyticsRuleParams) *AnalyticsRuleParamsModel {
 	if p == nil {
 		return nil
 	}
@@ -197,9 +195,9 @@ func (r *AnalyticsRuleResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	body := &api.AnalyticsRuleCreate{
+	body := typesense.AnalyticsRuleCreate{
 		Name:       data.Name.ValueString(),
-		Type:       api.AnalyticsRuleCreateType(data.Type.ValueString()),
+		Type:       data.Type.ValueString(),
 		Collection: data.Collection.ValueString(),
 		EventType:  data.EventType.ValueString(),
 		Params:     paramsModelToAPI(data.Params),
@@ -209,7 +207,7 @@ func (r *AnalyticsRuleResource) Create(ctx context.Context, req resource.CreateR
 		body.RuleTag = &v
 	}
 
-	created, err := r.client.Analytics().Rules().Create(ctx, []*api.AnalyticsRuleCreate{body})
+	created, err := r.client.CreateAnalyticsRules(ctx, []typesense.AnalyticsRuleCreate{body})
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create analytics rule: %s", err))
 		return
@@ -218,14 +216,14 @@ func (r *AnalyticsRuleResource) Create(ctx context.Context, req resource.CreateR
 		resp.Diagnostics.AddError("Client Error", "Server accepted analytics rule but returned no resources")
 		return
 	}
-	r.applyRuleToModel(created[0], &data)
+	r.applyRuleToModel(&created[0], &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *AnalyticsRuleResource) applyRuleToModel(rule *api.AnalyticsRule, data *AnalyticsRuleResourceModel) {
+func (r *AnalyticsRuleResource) applyRuleToModel(rule *typesense.AnalyticsRule, data *AnalyticsRuleResourceModel) {
 	data.Id = types.StringValue(rule.Name)
 	data.Name = types.StringValue(rule.Name)
-	data.Type = types.StringValue(string(rule.Type))
+	data.Type = types.StringValue(rule.Type)
 	data.Collection = types.StringValue(rule.Collection)
 	data.EventType = types.StringValue(rule.EventType)
 	if rule.RuleTag != nil {
@@ -242,9 +240,9 @@ func (r *AnalyticsRuleResource) Read(ctx context.Context, req resource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	rule, err := r.client.Analytics().Rule(data.Id.ValueString()).Retrieve(ctx)
+	rule, err := r.client.GetAnalyticsRule(ctx, data.Id.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") || strings.Contains(err.Error(), "not found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -261,14 +259,14 @@ func (r *AnalyticsRuleResource) Update(ctx context.Context, req resource.UpdateR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	body := &api.AnalyticsRuleUpdate{
-		Params: paramsUpdateModelToAPI(data.Params),
+	body := &typesense.AnalyticsRuleUpdate{
+		Params: paramsModelToAPI(data.Params),
 	}
 	if !data.RuleTag.IsNull() && data.RuleTag.ValueString() != "" {
 		v := data.RuleTag.ValueString()
 		body.RuleTag = &v
 	}
-	rule, err := r.client.Analytics().Rule(data.Id.ValueString()).Update(ctx, body)
+	rule, err := r.client.UpdateAnalyticsRule(ctx, data.Id.ValueString(), body)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update analytics rule: %s", err))
 		return
@@ -277,39 +275,14 @@ func (r *AnalyticsRuleResource) Update(ctx context.Context, req resource.UpdateR
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func paramsUpdateModelToAPI(p *AnalyticsRuleParamsModel) *api.AnalyticsRuleUpdateParams {
-	if p == nil {
-		return nil
-	}
-	out := &api.AnalyticsRuleUpdateParams{
-		DestinationCollection: p.DestinationCollection.ValueStringPointer(),
-		CounterField:          p.CounterField.ValueStringPointer(),
-		ExpandQuery:           p.ExpandQuery.ValueBoolPointer(),
-		CaptureSearchRequests: p.CaptureSearchRequests.ValueBoolPointer(),
-	}
-	if !p.Limit.IsNull() && !p.Limit.IsUnknown() {
-		v := int(p.Limit.ValueInt64())
-		out.Limit = &v
-	}
-	if !p.Weight.IsNull() && !p.Weight.IsUnknown() {
-		v := int(p.Weight.ValueInt64())
-		out.Weight = &v
-	}
-	if len(p.MetaFields) > 0 {
-		mfs := convertTerraformArrayToStringArray(p.MetaFields)
-		out.MetaFields = &mfs
-	}
-	return out
-}
-
 func (r *AnalyticsRuleResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var data AnalyticsRuleResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := r.client.Analytics().Rule(data.Id.ValueString()).Delete(ctx)
-	if err != nil && !strings.Contains(err.Error(), "Not Found") && !strings.Contains(err.Error(), "not found") {
+	err := r.client.DeleteAnalyticsRule(ctx, data.Id.ValueString())
+	if err != nil && !typesense.IsNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete analytics rule: %s", err))
 	}
 }
