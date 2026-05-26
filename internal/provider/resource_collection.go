@@ -972,6 +972,65 @@ func flattenFieldEmbed(embed *typesense.FieldEmbed, prior *CollectionFieldEmbedM
 	return res
 }
 
-func fieldsEqual(a, b CollectionResourceFieldModel) bool {
-	return reflect.DeepEqual(a, b)
+// fieldsEqual decides whether two Terraform field models are equivalent for
+// the purpose of triggering a Typesense PATCH drop+add. A drop+add re-embeds
+// every document in the collection, so we want to avoid it unless something
+// actually changed on the server side.
+//
+// Asymmetric absorption for write-only sensitive embed credentials: when
+// `state` has null for one of (access_token, api_key, client_secret,
+// refresh_token, service_account.private_key) but `plan` has a non-null
+// value, treat the pair as equal. This is the post-`terraform import`
+// case — the Typesense API never echoes those credentials, so the imported
+// state always carries null while the user's config carries the real
+// values. Without this asymmetry, the first apply after import would
+// trigger an unwanted drop+add re-embed of the whole collection.
+//
+// The asymmetry is important: `state` non-null vs `plan` different non-null
+// (a real secret rotation) is still treated as unequal, so drop+add fires
+// and the new value reaches the server. We only suppress the post-import
+// gap, not real changes.
+func fieldsEqual(state, plan CollectionResourceFieldModel) bool {
+	return reflect.DeepEqual(absorbPostImportSensitive(state, plan), plan)
+}
+
+// absorbPostImportSensitive returns a copy of `state` with sensitive embed
+// credentials filled in from `plan` wherever state's value is null. Used to
+// neutralize the post-import gap in fieldsEqual; the actual server-side
+// state of those fields stays opaque to Terraform.
+func absorbPostImportSensitive(state, plan CollectionResourceFieldModel) CollectionResourceFieldModel {
+	if state.Embed == nil || state.Embed.ModelConfig == nil ||
+		plan.Embed == nil || plan.Embed.ModelConfig == nil {
+		return state
+	}
+
+	embedCopy := *state.Embed
+	cfgCopy := *state.Embed.ModelConfig
+	embedCopy.ModelConfig = &cfgCopy
+
+	fillIfStateNull := func(s *types.String, p types.String) {
+		if s.IsNull() && !p.IsNull() {
+			*s = p
+		}
+	}
+	fillIfStateNull(&cfgCopy.AccessToken, plan.Embed.ModelConfig.AccessToken)
+	fillIfStateNull(&cfgCopy.ApiKey, plan.Embed.ModelConfig.ApiKey)
+	fillIfStateNull(&cfgCopy.ClientSecret, plan.Embed.ModelConfig.ClientSecret)
+	fillIfStateNull(&cfgCopy.RefreshToken, plan.Embed.ModelConfig.RefreshToken)
+
+	switch {
+	case cfgCopy.ServiceAccount == nil && plan.Embed.ModelConfig.ServiceAccount != nil:
+		// Whole service_account block missing in state (server didn't echo it
+		// after import). Treat as if state matched plan; the user's HCL is the
+		// only source of truth for these credentials anyway.
+		cfgCopy.ServiceAccount = plan.Embed.ModelConfig.ServiceAccount
+	case cfgCopy.ServiceAccount != nil && plan.Embed.ModelConfig.ServiceAccount != nil:
+		saCopy := *cfgCopy.ServiceAccount
+		cfgCopy.ServiceAccount = &saCopy
+		fillIfStateNull(&saCopy.PrivateKey, plan.Embed.ModelConfig.ServiceAccount.PrivateKey)
+	}
+
+	result := state
+	result.Embed = &embedCopy
+	return result
 }
