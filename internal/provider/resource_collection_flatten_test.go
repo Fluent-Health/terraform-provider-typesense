@@ -591,3 +591,122 @@ func TestFieldsEqual_MaskingDetectionRequiresFiveAsterisks(t *testing.T) {
 		t.Errorf("fieldsEqual should be false when state's '**' (2 asterisks) is treated as a real value, not Typesense masking which uses 5+ asterisks; got true")
 	}
 }
+
+// TestFlattenFieldEmbed_PreservesRealPriorWhenServerMasks: regression
+// against the "Provider produced inconsistent result after apply"
+// error that hit the v2.0.5/v2.0.6 dev plan during apply. The Update
+// path calls flattenCollectionFields(serverResponse, plan.Fields) — i.e.
+// the plan is used as `prior`. When the server returns masked values
+// for project_id / client_id / service_account.client_email, the
+// resulting state must hold the prior's real values, not the masked
+// server strings. Otherwise Terraform sees a planned set element with
+// project_id="fh-dev-svc" but a returned set element with
+// project_id="fh-de*****" and aborts the apply.
+func TestFlattenFieldEmbed_PreservesRealPriorWhenServerMasks(t *testing.T) {
+	priv := func(s string) *string { return &s }
+	apiEmbed := &typesense.FieldEmbed{
+		From: []string{"title"},
+		ModelConfig: typesense.FieldEmbedModelConfig{
+			ModelName: "gcp/gemini-embedding-001",
+			ProjectId: priv("fh-de*****"),  // server-masked
+			ClientId:  priv("***********"), // server-masked
+			Region:    priv("asia-south1"),
+			ServiceAccount: &typesense.GCPServiceAccount{
+				ClientEmail: "searc***********************", // server-masked
+				// PrivateKey omitted by server.
+			},
+		},
+	}
+	prior := &CollectionFieldEmbedModel{
+		ModelConfig: &CollectionFieldEmbedModelConfigModel{
+			ModelName: types.StringValue("gcp/gemini-embedding-001"),
+			ProjectId: types.StringValue("fh-dev-svc"),
+			ClientId:  types.StringUnknown(), // Optional+Computed, HCL leaves it
+			Region:    types.StringValue("asia-south1"),
+			ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+				ClientEmail: types.StringValue("vertex@fh-dev-svc.iam.gserviceaccount.com"),
+				PrivateKey:  types.StringValue("real-pk-bytes"),
+			},
+		},
+	}
+	got := flattenFieldEmbed(apiEmbed, prior)
+	if got == nil || got.ModelConfig == nil {
+		t.Fatalf("flattenFieldEmbed returned nil ModelConfig")
+	}
+
+	if got.ModelConfig.ProjectId.ValueString() != "fh-dev-svc" {
+		t.Errorf("project_id = %q, want %q preserved from prior — server returned masked value, plan would mismatch state",
+			got.ModelConfig.ProjectId.ValueString(), "fh-dev-svc")
+	}
+	if got.ModelConfig.ServiceAccount == nil {
+		t.Fatalf("service_account dropped")
+	}
+	if got.ModelConfig.ServiceAccount.ClientEmail.ValueString() != "vertex@fh-dev-svc.iam.gserviceaccount.com" {
+		t.Errorf("service_account.client_email = %q, want preserved from prior — server returned masked value",
+			got.ModelConfig.ServiceAccount.ClientEmail.ValueString())
+	}
+	// client_id: prior is Unknown, so there's no "real" prior to preserve.
+	// Server's masked value is acceptable here — Unknown→anything is allowed
+	// by Terraform's plan↔state contract.
+	if got.ModelConfig.ServiceAccount.PrivateKey.ValueString() != "real-pk-bytes" {
+		t.Errorf("service_account.private_key = %q, want preserved from prior — server doesn't echo private_key",
+			got.ModelConfig.ServiceAccount.PrivateKey.ValueString())
+	}
+}
+
+// TestFlattenFieldEmbed_NoPriorOrUnknownPriorAcceptsServerMasked:
+// fresh-import / no-prior fallback. When `prior` is nil OR carries
+// Unknown for the masked field, the server's value (masked or not)
+// lands in state. There's nothing better to use, and the next
+// user-driven Update will then send the real HCL value and overwrite
+// the masked entry via the same preservation path.
+func TestFlattenFieldEmbed_NoPriorOrUnknownPriorAcceptsServerMasked(t *testing.T) {
+	priv := func(s string) *string { return &s }
+	apiEmbed := &typesense.FieldEmbed{
+		From: []string{"title"},
+		ModelConfig: typesense.FieldEmbedModelConfig{
+			ModelName: "gcp/gemini-embedding-001",
+			ProjectId: priv("fh-de*****"),
+			ClientId:  priv("***********"),
+		},
+	}
+	got := flattenFieldEmbed(apiEmbed, nil)
+	if got == nil || got.ModelConfig == nil {
+		t.Fatalf("flattenFieldEmbed returned nil ModelConfig")
+	}
+	if got.ModelConfig.ProjectId.ValueString() != "fh-de*****" {
+		t.Errorf("project_id = %q, want %q — no prior to preserve from",
+			got.ModelConfig.ProjectId.ValueString(), "fh-de*****")
+	}
+}
+
+// TestFlattenFieldEmbed_RealServerValueOverridesPrior: symmetric guard.
+// When the server returns a real, non-masked value that differs from
+// prior, the server wins. Otherwise external edits made directly via
+// the Typesense API wouldn't surface on the next refresh.
+func TestFlattenFieldEmbed_RealServerValueOverridesPrior(t *testing.T) {
+	priv := func(s string) *string { return &s }
+	apiEmbed := &typesense.FieldEmbed{
+		From: []string{"title"},
+		ModelConfig: typesense.FieldEmbedModelConfig{
+			ModelName: "gcp/gemini-embedding-001",
+			ProjectId: priv("fh-prod-svc"), // server differs from prior — real change
+			Region:    priv("us-central1"),
+		},
+	}
+	prior := &CollectionFieldEmbedModel{
+		ModelConfig: &CollectionFieldEmbedModelConfigModel{
+			ModelName: types.StringValue("gcp/gemini-embedding-001"),
+			ProjectId: types.StringValue("fh-dev-svc"),
+			Region:    types.StringValue("asia-south1"),
+		},
+	}
+	got := flattenFieldEmbed(apiEmbed, prior)
+	if got.ModelConfig.ProjectId.ValueString() != "fh-prod-svc" {
+		t.Errorf("project_id = %q, want %q from server — real (non-masked) server value must override prior",
+			got.ModelConfig.ProjectId.ValueString(), "fh-prod-svc")
+	}
+	if got.ModelConfig.Region.ValueString() != "us-central1" {
+		t.Errorf("region = %q, want %q from server", got.ModelConfig.Region.ValueString(), "us-central1")
+	}
+}
