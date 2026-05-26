@@ -23,4 +23,46 @@ description: |-
 Import is supported using the following syntax:
 
 {{codefile "shell" .ImportFile}}
+
+### Importing collections that use auto-embedding
+
+If the collection has a field with an `embed.model_config`, the import flow needs an extra heads-up because Typesense never echoes sensitive credentials on `GET`:
+
+- `embed.model_config.access_token`
+- `embed.model_config.api_key`
+- `embed.model_config.client_secret`
+- `embed.model_config.refresh_token`
+- `embed.model_config.service_account.private_key`
+
+After `terraform import`, these land in state as `null`. The first `terraform plan` will then look alarming — Terraform renders any change inside a `SetNestedBlock` (which `fields` is) as a remove-and-add of the whole set element, so a collection with one embed field will show:
+
+```
+~ resource "typesense_collection" "loinc" {
+    + deletion_protection = false
+    ...
+    - fields { ... }        # ← the embedding field, rendered as "drop"
+      fields { ... } × N    # other fields, unchanged
+    + fields { ... }        # ← the embedding field, rendered as "add"
+  }
+```
+
+**This is purely a Terraform-side rendering quirk; the apply is a no-op against the Typesense API.** The provider's `Update` path explicitly treats "state has `null` for a write-only credential, plan has a non-null value" as equal, so no drop+add is issued upstream and no documents are re-embedded. After the apply finishes, the credentials from your HCL are written into Terraform state and subsequent plans stay diff-free.
+
+If you'd rather not see the misleading plan output for the first cycle, add a temporary `lifecycle` block, apply once, then remove it:
+
+```terraform
+resource "typesense_collection" "loinc" {
+  # ... fields with embed.model_config.service_account etc.
+
+  lifecycle {
+    ignore_changes = [fields] # only for the first apply after import
+  }
+}
+```
+
+### What about rotating an embed credential?
+
+This is the one case the import-gap handling does *not* cover. If state has a non-null sensitive value and your config has a different non-null value, the provider treats it as a real diff and issues a Typesense `PATCH` that drops and re-adds the embedding field — which on the server side **does re-embed every document in the collection**. That cost is intrinsic to Typesense's API; there's no way to mutate an embed field's `model_config` in place.
+
+If you need to rotate a Vertex AI service-account key or an OpenAI API key without re-embedding, generate the new credential out of band, write it directly to the Typesense server (e.g. via a one-off API call that the server accepts but Terraform can't model), then update your HCL to match — the provider will see state and config as equal and skip the diff.
 {{- end }}
