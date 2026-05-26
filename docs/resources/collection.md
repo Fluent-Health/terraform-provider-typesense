@@ -164,7 +164,7 @@ Optional:
 - `index` (Boolean) Index field. Defaults to true.
 - `infix` (Boolean) Infix field. Defaults to false.
 - `locale` (String) Locale for language-specific tokenization. Defaults to empty string.
-- `num_dim` (Number) Number of dimensions for vector fields (float[] type). Required for vector search.
+- `num_dim` (Number) Number of dimensions for vector fields (float[] type). Required for manual vector search fields; auto-computed by the server for auto-embedded fields (from the embedder's output dimension).
 - `optional` (Boolean) Optional field. Defaults to false.
 - `range_index` (Boolean) Enables an index optimized for range filtering on numerical fields. Defaults to false.
 - `reference` (String) Name of a field in another collection that should be linked to this collection so that it can be joined during query (e.g. "users.id").

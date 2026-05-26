@@ -290,3 +290,104 @@ func TestAbsorbPostImportSensitive_DoesNotMutateInputs(t *testing.T) {
 		t.Errorf("state.Embed.ModelConfig.ServiceAccount.PrivateKey was mutated to %q", state.Embed.ModelConfig.ServiceAccount.PrivateKey.ValueString())
 	}
 }
+
+// TestFieldsEqual_PostImportAutoEmbedNumDimMatchesNullPlan: the auto-embed
+// counterpart of TestFieldsEqual_PostImportNullStateMatchesNonNullPlan. For
+// an auto-embedded float[] field, Typesense computes num_dim from the
+// embedder's output dimension and echoes it on GET. HCL never sets num_dim
+// on auto-embedded fields (the embedder owns that value), so post-import
+// state has a concrete num_dim while plan stays null. Without asymmetric
+// absorption, fieldsEqual returns false and Update appends a drop+add for
+// the embedding field — which on Typesense's side re-embeds every document
+// (PM-3851 dev incident: ~100k LOINC + ~300k SNOMED docs re-embedded for
+// no user-visible change).
+func TestFieldsEqual_PostImportAutoEmbedNumDimMatchesNullPlan(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name:    types.StringValue("embedding"),
+		Type:    types.StringValue("float[]"),
+		NumDim:  types.Int64Value(768), // server-computed from gcp/gemini-embedding-001
+		VecDist: types.StringValue("cosine"),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/gemini-embedding-001"),
+				ProjectId: types.StringValue("my-proj"),
+				Region:    types.StringValue("asia-south1"),
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					ClientEmail: types.StringValue("vertex@my-proj.iam.gserviceaccount.com"),
+					// PrivateKey null — server didn't echo it.
+				},
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		// NumDim null — HCL doesn't set it on auto-embedded fields.
+		VecDist: types.StringValue("cosine"),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/gemini-embedding-001"),
+				ProjectId: types.StringValue("my-proj"),
+				Region:    types.StringValue("asia-south1"),
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					ClientEmail: types.StringValue("vertex@my-proj.iam.gserviceaccount.com"),
+					PrivateKey:  types.StringValue("real-pk"),
+				},
+			},
+		},
+	}
+	if !fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be true when state has server-computed num_dim and plan has null on an auto-embedded field; got false — this would trigger a destructive drop+add re-embed of every document")
+	}
+}
+
+// TestFieldsEqual_NumDimDiffersWithoutEmbedStillTriggersUpdate: manual
+// vector field path — the user is the source of truth for num_dim, so a
+// state-vs-plan mismatch is a real change and must still trigger drop+add.
+// The absorb logic is scoped to fields that have an embed block on both
+// sides so this case is unaffected.
+func TestFieldsEqual_NumDimDiffersWithoutEmbedStillTriggersUpdate(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name:    types.StringValue("vec"),
+		Type:    types.StringValue("float[]"),
+		NumDim:  types.Int64Value(384),
+		VecDist: types.StringValue("cosine"),
+	}
+	planField := CollectionResourceFieldModel{
+		Name:    types.StringValue("vec"),
+		Type:    types.StringValue("float[]"),
+		NumDim:  types.Int64Value(768),
+		VecDist: types.StringValue("cosine"),
+	}
+	if fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be false when num_dim differs on a manual vector field (no embed); got true — user's dim change would silently fail to reach the server")
+	}
+}
+
+// TestFieldsEqual_NumDimAbsorbDoesNotFireWhenPlanRemovesEmbed: edge case —
+// user removes the embed block (switching from auto-embedded to regular
+// field). State still has num_dim from the old auto-embedded shape; plan
+// has null. The absorb must NOT fire here, because the change is real
+// (field type is effectively changing) and the drop+add is what we want.
+func TestFieldsEqual_NumDimAbsorbDoesNotFireWhenPlanRemovesEmbed(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name:   types.StringValue("embedding"),
+		Type:   types.StringValue("float[]"),
+		NumDim: types.Int64Value(768),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/gemini-embedding-001"),
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		// Embed removed by user; num_dim null.
+	}
+	if fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be false when plan removes the embed block; got true — user's structural change would silently fail to reach the server")
+	}
+}
