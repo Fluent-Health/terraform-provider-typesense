@@ -17,7 +17,7 @@ Open an issue describing the problem, steps to reproduce, the provider version, 
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.24+
 - Docker (for running Typesense locally during acceptance tests)
 - Terraform CLI
 
