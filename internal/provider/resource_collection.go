@@ -968,6 +968,17 @@ func flattenFieldEmbed(embed *typesense.FieldEmbed, prior *CollectionFieldEmbedM
 		res.ModelConfig.ClientSecret = prior.ModelConfig.ClientSecret
 		res.ModelConfig.RefreshToken = prior.ModelConfig.RefreshToken
 
+		// Server may mask credential-like fields on GET (project_id,
+		// client_id, service_account.client_email come back as
+		// "fh-de*****" / "***********" / "searc***********"). If prior
+		// holds a real (non-null, non-unknown, non-masked) value, keep
+		// it — otherwise the post-Update state would differ from plan
+		// and Terraform aborts with "Provider produced inconsistent
+		// result after apply". Mirrors setPreservingPriorReal in
+		// resource_nl_search_model.go.
+		preserveFromPriorIfServerMasked(&res.ModelConfig.ProjectId, prior.ModelConfig.ProjectId)
+		preserveFromPriorIfServerMasked(&res.ModelConfig.ClientId, prior.ModelConfig.ClientId)
+
 		if prior.ModelConfig.ServiceAccount != nil {
 			if res.ModelConfig.ServiceAccount == nil {
 				// Server omitted the service_account block entirely; restore it
@@ -975,11 +986,27 @@ func flattenFieldEmbed(embed *typesense.FieldEmbed, prior *CollectionFieldEmbedM
 				res.ModelConfig.ServiceAccount = prior.ModelConfig.ServiceAccount
 			} else {
 				res.ModelConfig.ServiceAccount.PrivateKey = prior.ModelConfig.ServiceAccount.PrivateKey
+				preserveFromPriorIfServerMasked(&res.ModelConfig.ServiceAccount.ClientEmail, prior.ModelConfig.ServiceAccount.ClientEmail)
 			}
 		}
 	}
 
 	return res
+}
+
+// preserveFromPriorIfServerMasked replaces *d with priorVal when *d (the
+// freshly-flattened server value) matches Typesense's masking pattern
+// and priorVal carries a real (non-null, non-unknown, non-masked) value.
+// The opposite-direction sibling of setPreservingPriorReal in
+// resource_nl_search_model.go — both bridge the same server-side
+// masking, but flatten populates the destination from the server
+// upfront and needs an "override if masked" check, while the NL
+// resource fills the destination from the server pointer and needs
+// "skip overwrite if masked".
+func preserveFromPriorIfServerMasked(d *types.String, priorVal types.String) {
+	if isServerRedacted(*d) && !priorVal.IsNull() && !priorVal.IsUnknown() && !isServerRedacted(priorVal) {
+		*d = priorVal
+	}
 }
 
 // fieldsEqual decides whether two Terraform field models are equivalent for
