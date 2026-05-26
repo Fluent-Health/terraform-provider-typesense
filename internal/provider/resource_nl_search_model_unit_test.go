@@ -67,7 +67,7 @@ func TestApplyNLSchemaToModel_PreservesPriorWhenServerReturnsMaskedProjectId(t *
 	// client_id: prior was unset (Optional+Computed scenario, HCL doesn't
 	// set it for the SA flow). Server returns masked. With no prior real
 	// value to preserve, we accept the masked server value — there's no
-	// better option. This matches the collection flatten behaviour.
+	// better option. This matches the collection flatten behavior.
 	if prior.ClientId.ValueString() != "***********" {
 		t.Errorf("client_id = %q, want %q from server (no prior to preserve)",
 			prior.ClientId.ValueString(), "***********")
