@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -236,7 +237,15 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 						},
 						"num_dim": schema.Int64Attribute{
 							Optional:    true,
-							Description: "Number of dimensions for vector fields (float[] type). Required for vector search.",
+							Computed:    true,
+							Description: "Number of dimensions for vector fields (float[] type). Required for manual vector search fields; auto-computed by the server for auto-embedded fields (from the embedder's output dimension).",
+							PlanModifiers: []planmodifier.Int64{
+								// Auto-embedded fields: HCL leaves num_dim unset and the
+								// server computes it from the embedder. Carry the server's
+								// value across plans so the set-element hash stays stable
+								// and a no-op apply after import stays no-op.
+								int64planmodifier.UseStateForUnknown(),
+							},
 						},
 						"reference": schema.StringAttribute{
 							Optional:    true,
@@ -977,27 +986,37 @@ func flattenFieldEmbed(embed *typesense.FieldEmbed, prior *CollectionFieldEmbedM
 // every document in the collection, so we want to avoid it unless something
 // actually changed on the server side.
 //
-// Asymmetric absorption for write-only sensitive embed credentials: when
-// `state` has null for one of (access_token, api_key, client_secret,
-// refresh_token, service_account.private_key) but `plan` has a non-null
-// value, treat the pair as equal. This is the post-`terraform import`
-// case — the Typesense API never echoes those credentials, so the imported
-// state always carries null while the user's config carries the real
-// values. Without this asymmetry, the first apply after import would
-// trigger an unwanted drop+add re-embed of the whole collection.
+// Asymmetric absorption normalizes two classes of state-vs-plan mismatch
+// that aren't user-driven changes:
 //
-// The asymmetry is important: `state` non-null vs `plan` different non-null
-// (a real secret rotation) is still treated as unequal, so drop+add fires
-// and the new value reaches the server. We only suppress the post-import
-// gap, not real changes.
+//  1. Write-only sensitive embed credentials (access_token, api_key,
+//     client_secret, refresh_token, service_account.private_key, and the
+//     whole service_account block): the Typesense API never echoes these
+//     on GET, so post-import state has them as null while plan has the
+//     user's real values. Treat as equal — the server already has them.
+//
+//  2. Server-computed num_dim on auto-embedded float[] fields: Typesense
+//     computes num_dim from the embedder's output dimension and returns
+//     it on GET. HCL doesn't (and shouldn't) set num_dim on auto-embedded
+//     fields, so post-import state has a concrete value while plan stays
+//     null. Treat as equal — the server keeps computing it.
+//
+// The asymmetries are deliberately one-directional. For sensitive fields,
+// state-null vs plan-non-null is the post-import gap (suppress); but
+// state-non-null vs plan-different-non-null is a real rotation (do not
+// suppress — let drop+add fire so the new value reaches the server). For
+// num_dim, state-non-null vs plan-null is the auto-embed import path
+// (suppress); but state-non-null vs plan-different-non-null is a manual
+// vector field's dim change (do not suppress).
 func fieldsEqual(state, plan CollectionResourceFieldModel) bool {
 	return reflect.DeepEqual(absorbPostImportSensitive(state, plan), plan)
 }
 
-// absorbPostImportSensitive returns a copy of `state` with sensitive embed
-// credentials filled in from `plan` wherever state's value is null. Used to
-// neutralize the post-import gap in fieldsEqual; the actual server-side
-// state of those fields stays opaque to Terraform.
+// absorbPostImportSensitive returns a copy of `state` with post-import
+// asymmetries normalized against `plan`. See fieldsEqual for the list of
+// fields covered and the direction of each absorption. Used only to
+// neutralize the post-import gap; the actual server-side state of those
+// fields stays opaque to Terraform.
 func absorbPostImportSensitive(state, plan CollectionResourceFieldModel) CollectionResourceFieldModel {
 	if state.Embed == nil || state.Embed.ModelConfig == nil ||
 		plan.Embed == nil || plan.Embed.ModelConfig == nil {
@@ -1032,5 +1051,16 @@ func absorbPostImportSensitive(state, plan CollectionResourceFieldModel) Collect
 
 	result := state
 	result.Embed = &embedCopy
+
+	// Server-computed num_dim. We only reach here when both sides have an
+	// embed block (early return above), so this is the auto-embed path.
+	// State carries the server-computed dim, plan has null — let plan win.
+	// If the user actually set num_dim in HCL (manual override on an auto-
+	// embedded field), plan is non-null and this branch is skipped, so a
+	// real change still propagates through reflect.DeepEqual.
+	if !state.NumDim.IsNull() && plan.NumDim.IsNull() {
+		result.NumDim = plan.NumDim
+	}
+
 	return result
 }
