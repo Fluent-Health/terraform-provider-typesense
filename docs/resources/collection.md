@@ -189,15 +189,15 @@ Optional:
 
 Optional:
 
-- `access_token` (String, Sensitive) Access token for authentication
-- `api_key` (String, Sensitive) API key for authentication
+- `access_token` (String, Sensitive) Access token for authentication. Write-only — Typesense never echoes this on Read, so the value is preserved from prior Terraform state.
+- `api_key` (String, Sensitive) API key for authentication. Write-only — Typesense never echoes this on Read, so the value is preserved from prior Terraform state.
 - `client_id` (String) Client ID for OAuth
-- `client_secret` (String, Sensitive) Client secret for OAuth
+- `client_secret` (String, Sensitive) Client secret for OAuth. Write-only — Typesense never echoes this on Read, so the value is preserved from prior Terraform state.
 - `indexing_prefix` (String) Prefix added to text during indexing
 - `model_name` (String) Model name for embedding generation (e.g. ts/clip-vit-b-p32)
 - `project_id` (String) Project ID for cloud providers
 - `query_prefix` (String) Prefix added to text during querying
-- `refresh_token` (String, Sensitive) Refresh token for OAuth
+- `refresh_token` (String, Sensitive) Refresh token for OAuth. Write-only — Typesense never echoes this on Read, so the value is preserved from prior Terraform state.
 - `region` (String) Region for GCP Vertex AI.
 - `service_account` (Block, Optional) (see [below for nested schema](#nestedblock--fields--embed--model_config--service_account))
 - `url` (String) URL for remote embedding model

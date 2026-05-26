@@ -294,15 +294,13 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 										},
 										"access_token": schema.StringAttribute{
 											Optional:    true,
-											Computed:    true,
 											Sensitive:   true,
-											Description: "Access token for authentication",
+											Description: "Access token for authentication. Write-only — Typesense never echoes this on Read, so the value is preserved from prior Terraform state.",
 										},
 										"api_key": schema.StringAttribute{
 											Optional:    true,
-											Computed:    true,
 											Sensitive:   true,
-											Description: "API key for authentication",
+											Description: "API key for authentication. Write-only — Typesense never echoes this on Read, so the value is preserved from prior Terraform state.",
 										},
 										"client_id": schema.StringAttribute{
 											Optional:    true,
@@ -311,9 +309,8 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 										},
 										"client_secret": schema.StringAttribute{
 											Optional:    true,
-											Computed:    true,
 											Sensitive:   true,
-											Description: "Client secret for OAuth",
+											Description: "Client secret for OAuth. Write-only — Typesense never echoes this on Read, so the value is preserved from prior Terraform state.",
 										},
 										"indexing_prefix": schema.StringAttribute{
 											Optional:    true,
@@ -332,9 +329,8 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 										},
 										"refresh_token": schema.StringAttribute{
 											Optional:    true,
-											Computed:    true,
 											Sensitive:   true,
-											Description: "Refresh token for OAuth",
+											Description: "Refresh token for OAuth. Write-only — Typesense never echoes this on Read, so the value is preserved from prior Terraform state.",
 										},
 										"region": schema.StringAttribute{
 											Optional:    true,
@@ -384,6 +380,12 @@ func (r *CollectionResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
+	// Snapshot the plan's fields before we overwrite data.Fields from the API
+	// response. Used to preserve sensitive embed credentials the server never
+	// echoes (api_key, access_token, client_secret, refresh_token, and
+	// service_account.private_key) — see flattenFieldEmbed.
+	planFields := data.Fields
+
 	schema := &typesense.CollectionCreateSchema{}
 	schema.Name = data.Name.ValueString()
 	schema.DefaultSortingField = data.DefaultSortingField.ValueStringPointer()
@@ -423,7 +425,7 @@ func (r *CollectionResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	data.EnableNestedFields = types.BoolPointerValue(collection.EnableNestedFields)
-	data.Fields = flattenCollectionFields(collection.Fields)
+	data.Fields = flattenCollectionFields(collection.Fields, planFields)
 
 	data.SymbolsToIndex = []types.String{}
 	if collection.SymbolsToIndex != nil {
@@ -452,6 +454,11 @@ func (r *CollectionResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
+	// Snapshot prior state so flattenCollectionFields can preserve sensitive
+	// embed credentials the server never echoes (api_key, access_token,
+	// client_secret, refresh_token, service_account.private_key).
+	priorFields := data.Fields
+
 	id := data.Id.ValueString()
 
 	collection, err := r.client.GetCollection(ctx, id)
@@ -476,7 +483,7 @@ func (r *CollectionResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	data.EnableNestedFields = types.BoolPointerValue(collection.EnableNestedFields)
-	data.Fields = flattenCollectionFields(collection.Fields)
+	data.Fields = flattenCollectionFields(collection.Fields, priorFields)
 
 	if collection.SymbolsToIndex != nil {
 		data.SymbolsToIndex = []types.String{}
@@ -520,52 +527,65 @@ func intPointerValue(ptr *int) types.Int64 {
 	return types.Int64Value(int64(*ptr))
 }
 
-func flattenCollectionFields(fields []typesense.Field) []CollectionResourceFieldModel {
-	if fields != nil {
-		fis := make([]CollectionResourceFieldModel, len(fields))
-
-		for i, fieldResponse := range fields {
-			var field CollectionResourceFieldModel
-			field.Name = types.StringValue(fieldResponse.Name)
-			field.Facet = boolPointerValueWithDefault(fieldResponse.Facet, false)
-			field.Index = boolPointerValueWithDefault(fieldResponse.Index, true)
-			field.Optional = boolPointerValueWithDefault(fieldResponse.Optional, false)
-			field.Sort = boolPointerValueWithDefault(fieldResponse.Sort, false)
-			field.Infix = boolPointerValueWithDefault(fieldResponse.Infix, false)
-			field.Type = types.StringValue(fieldResponse.Type)
-			field.Stem = boolPointerValueWithDefault(fieldResponse.Stem, false)
-			field.StemDictionary = stringPointerValueWithDefault(fieldResponse.StemDictionary, "")
-			field.Locale = stringPointerValueWithDefault(fieldResponse.Locale, "")
-			field.Store = boolPointerValueWithDefault(fieldResponse.Store, true)
-			field.NumDim = intPointerValue(fieldResponse.NumDim)
-			if fieldResponse.Reference != nil {
-				field.Reference = types.StringValue(*fieldResponse.Reference)
-			}
-			if fieldResponse.AsyncReference != nil {
-				field.AsyncReference = types.BoolValue(*fieldResponse.AsyncReference)
-			}
-			field.RangeIndex = boolPointerValueWithDefault(fieldResponse.RangeIndex, false)
-			field.VecDist = stringPointerValueWithDefault(fieldResponse.VecDist, "cosine")
-			if fieldResponse.SymbolsToIndex != nil {
-				for _, s := range *fieldResponse.SymbolsToIndex {
-					field.SymbolsToIndex = append(field.SymbolsToIndex, types.StringValue(s))
-				}
-			}
-			if fieldResponse.TokenSeparators != nil {
-				for _, s := range *fieldResponse.TokenSeparators {
-					field.TokenSeparators = append(field.TokenSeparators, types.StringValue(s))
-				}
-			}
-			if fieldResponse.Embed != nil {
-				field.Embed = flattenFieldEmbed(fieldResponse.Embed)
-			}
-			fis[i] = field
-		}
-
-		return fis
+// flattenCollectionFields converts the Typesense API field list to the
+// Terraform model. The optional `prior` slice is the previous Terraform model
+// for the same collection (state in Read, plan in Create / Update); it is used
+// to preserve write-only sensitive embed credentials that the Typesense API
+// never echoes back. See flattenFieldEmbed for the specific fields preserved.
+func flattenCollectionFields(fields []typesense.Field, prior []CollectionResourceFieldModel) []CollectionResourceFieldModel {
+	if fields == nil {
+		return make([]CollectionResourceFieldModel, 0)
 	}
 
-	return make([]CollectionResourceFieldModel, 0)
+	priorByName := make(map[string]CollectionResourceFieldModel, len(prior))
+	for _, f := range prior {
+		priorByName[f.Name.ValueString()] = f
+	}
+
+	fis := make([]CollectionResourceFieldModel, len(fields))
+	for i, fieldResponse := range fields {
+		var field CollectionResourceFieldModel
+		field.Name = types.StringValue(fieldResponse.Name)
+		field.Facet = boolPointerValueWithDefault(fieldResponse.Facet, false)
+		field.Index = boolPointerValueWithDefault(fieldResponse.Index, true)
+		field.Optional = boolPointerValueWithDefault(fieldResponse.Optional, false)
+		field.Sort = boolPointerValueWithDefault(fieldResponse.Sort, false)
+		field.Infix = boolPointerValueWithDefault(fieldResponse.Infix, false)
+		field.Type = types.StringValue(fieldResponse.Type)
+		field.Stem = boolPointerValueWithDefault(fieldResponse.Stem, false)
+		field.StemDictionary = stringPointerValueWithDefault(fieldResponse.StemDictionary, "")
+		field.Locale = stringPointerValueWithDefault(fieldResponse.Locale, "")
+		field.Store = boolPointerValueWithDefault(fieldResponse.Store, true)
+		field.NumDim = intPointerValue(fieldResponse.NumDim)
+		if fieldResponse.Reference != nil {
+			field.Reference = types.StringValue(*fieldResponse.Reference)
+		}
+		if fieldResponse.AsyncReference != nil {
+			field.AsyncReference = types.BoolValue(*fieldResponse.AsyncReference)
+		}
+		field.RangeIndex = boolPointerValueWithDefault(fieldResponse.RangeIndex, false)
+		field.VecDist = stringPointerValueWithDefault(fieldResponse.VecDist, "cosine")
+		if fieldResponse.SymbolsToIndex != nil {
+			for _, s := range *fieldResponse.SymbolsToIndex {
+				field.SymbolsToIndex = append(field.SymbolsToIndex, types.StringValue(s))
+			}
+		}
+		if fieldResponse.TokenSeparators != nil {
+			for _, s := range *fieldResponse.TokenSeparators {
+				field.TokenSeparators = append(field.TokenSeparators, types.StringValue(s))
+			}
+		}
+		if fieldResponse.Embed != nil {
+			var priorEmbed *CollectionFieldEmbedModel
+			if p, ok := priorByName[field.Name.ValueString()]; ok {
+				priorEmbed = p.Embed
+			}
+			field.Embed = flattenFieldEmbed(fieldResponse.Embed, priorEmbed)
+		}
+		fis[i] = field
+	}
+
+	return fis
 }
 
 func (r *CollectionResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -652,7 +672,9 @@ func (r *CollectionResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	plan.EnableNestedFields = types.BoolPointerValue(collection.EnableNestedFields)
-	plan.Fields = flattenCollectionFields(collection.Fields)
+	// Pass the plan's fields (not state's) as the prior reference so the
+	// post-Update state reflects the user's just-applied sensitive values.
+	plan.Fields = flattenCollectionFields(collection.Fields, plan.Fields)
 
 	plan.SymbolsToIndex = []types.String{}
 	if collection.SymbolsToIndex != nil {
@@ -880,7 +902,23 @@ func fieldEmbedModelToAPI(embed *CollectionFieldEmbedModel) *typesense.FieldEmbe
 	return embedAPI
 }
 
-func flattenFieldEmbed(embed *typesense.FieldEmbed) *CollectionFieldEmbedModel {
+// flattenFieldEmbed converts the Typesense API embed shape to the Terraform
+// model. `prior` is the previous Terraform value for this same embed block
+// (state on Read, plan on Create/Update). It is used to preserve write-only
+// sensitive credentials:
+//
+//   - model_config.{access_token, api_key, client_secret, refresh_token}
+//   - model_config.service_account.private_key
+//
+// The Typesense server never echoes these on a subsequent GET, so without
+// this preservation, a Read after Create silently blanks them in Terraform
+// state. That creates a phantom diff on the next plan, and because
+// Typesense's collection PATCH endpoint only supports drop+add for field
+// changes, applying it would re-embed every document in the collection.
+//
+// This mirrors the comment already in applyNLSchemaToModel
+// (resource_nl_search_model.go) for the same reason on /nl_search_models.
+func flattenFieldEmbed(embed *typesense.FieldEmbed, prior *CollectionFieldEmbedModel) *CollectionFieldEmbedModel {
 	if embed == nil {
 		return nil
 	}
@@ -898,21 +936,36 @@ func flattenFieldEmbed(embed *typesense.FieldEmbed) *CollectionFieldEmbedModel {
 	res.ModelConfig = &CollectionFieldEmbedModelConfigModel{
 		ModelName:      types.StringValue(embed.ModelConfig.ModelName),
 		Url:            types.StringPointerValue(embed.ModelConfig.Url),
-		AccessToken:    types.StringPointerValue(embed.ModelConfig.AccessToken),
-		ApiKey:         types.StringPointerValue(embed.ModelConfig.ApiKey),
 		ClientId:       types.StringPointerValue(embed.ModelConfig.ClientId),
-		ClientSecret:   types.StringPointerValue(embed.ModelConfig.ClientSecret),
 		IndexingPrefix: types.StringPointerValue(embed.ModelConfig.IndexingPrefix),
 		ProjectId:      types.StringPointerValue(embed.ModelConfig.ProjectId),
 		QueryPrefix:    types.StringPointerValue(embed.ModelConfig.QueryPrefix),
-		RefreshToken:   types.StringPointerValue(embed.ModelConfig.RefreshToken),
 		Region:         types.StringPointerValue(embed.ModelConfig.Region),
+		// access_token, api_key, client_secret, refresh_token are sensitive
+		// and not echoed by the server — preserved below from `prior`.
 	}
 	if sa := embed.ModelConfig.ServiceAccount; sa != nil {
 		res.ModelConfig.ServiceAccount = &CollectionFieldEmbedServiceAccountModel{
 			ClientEmail: types.StringValue(sa.ClientEmail),
-			PrivateKey:  types.StringValue(sa.PrivateKey),
 			TokenURI:    types.StringPointerValue(sa.TokenURI),
+			// private_key is sensitive and not echoed — preserved below from `prior`.
+		}
+	}
+
+	if prior != nil && prior.ModelConfig != nil {
+		res.ModelConfig.AccessToken = prior.ModelConfig.AccessToken
+		res.ModelConfig.ApiKey = prior.ModelConfig.ApiKey
+		res.ModelConfig.ClientSecret = prior.ModelConfig.ClientSecret
+		res.ModelConfig.RefreshToken = prior.ModelConfig.RefreshToken
+
+		if prior.ModelConfig.ServiceAccount != nil {
+			if res.ModelConfig.ServiceAccount == nil {
+				// Server omitted the service_account block entirely; restore it
+				// from prior so we don't lose the user's credentials in state.
+				res.ModelConfig.ServiceAccount = prior.ModelConfig.ServiceAccount
+			} else {
+				res.ModelConfig.ServiceAccount.PrivateKey = prior.ModelConfig.ServiceAccount.PrivateKey
+			}
 		}
 	}
 
