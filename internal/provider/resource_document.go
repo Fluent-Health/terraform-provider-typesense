@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -14,8 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -43,7 +41,7 @@ func (r *DocumentResource) Metadata(ctx context.Context, req resource.MetadataRe
 
 func (r *DocumentResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Every record you index in Typesense is called a Document",
+		MarkdownDescription: "Every record you index in Typesense is called a Document. See the [Typesense API docs](https://typesense.org/docs/30.2/api/documents.html).",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -77,23 +75,7 @@ func (r *DocumentResource) Schema(ctx context.Context, req resource.SchemaReques
 }
 
 func (r *DocumentResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	client, ok := req.ProviderData.(*typesense.Client)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *DocumentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -115,7 +97,7 @@ func (r *DocumentResource) Create(ctx context.Context, req resource.CreateReques
 
 	document["id"] = data.Name.ValueString()
 
-	result, err := r.client.Collection(data.CollectionName.ValueString()).Documents().Create(ctx, document, &api.DocumentIndexParameters{})
+	result, err := r.client.IndexDocument(ctx, data.CollectionName.ValueString(), document, nil)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create document, got error: %s", err))
@@ -130,7 +112,7 @@ func (r *DocumentResource) Create(ctx context.Context, req resource.CreateReques
 	data.Id = types.StringValue(createId(data.CollectionName.ValueString(), docId))
 
 	// Read back the document to ensure consistent JSON formatting
-	retrievedDoc, err := r.client.Collection(data.CollectionName.ValueString()).Document(docId).Retrieve(ctx)
+	retrievedDoc, err := r.client.GetDocument(ctx, data.CollectionName.ValueString(), docId)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to retrieve created document, got error: %s", err))
 		return
@@ -169,10 +151,10 @@ func (r *DocumentResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	result, err := r.client.Collection(collectionName).Document(id).Retrieve(ctx)
+	result, err := r.client.GetDocument(ctx, collectionName, id)
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			resp.Diagnostics.AddWarning("Resource Not Found", fmt.Sprintf("Unable to retrieve document, got error: %s", err))
 		} else {
@@ -227,19 +209,9 @@ func (r *DocumentResource) Update(ctx context.Context, req resource.UpdateReques
 
 	document["id"] = id
 
-	result, err := r.client.Collection(collectionName).Document(id).Update(ctx, document, &api.DocumentIndexParameters{})
-	_ = result // result is empty
-
-	if err != nil {
-
-		// check if error contains 201 response
-		if strings.Contains(err.Error(), "201") {
-			// ignore, sometimes typesense returns 201 code
-		} else {
-			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update document, got error: %s", err))
-			return
-		}
-
+	if _, err := r.client.UpdateDocument(ctx, collectionName, id, document, nil); err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update document, got error: %s", err))
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -263,10 +235,10 @@ func (r *DocumentResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	tflog.Warn(ctx, "###Delete Document with id="+data.Id.ValueString())
 
-	_, err := r.client.Collection(collectionName).Document(id).Delete(ctx)
+	err := r.client.DeleteDocument(ctx, collectionName, id)
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			resp.Diagnostics.AddWarning("Resource Not Found", fmt.Sprintf("Unable to delete document, got error: %s", err))
 		} else {

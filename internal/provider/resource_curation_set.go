@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -14,8 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &CurationSetResource{}
@@ -73,7 +71,7 @@ func (r *CurationSetResource) Metadata(ctx context.Context, req resource.Metadat
 
 func (r *CurationSetResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A global curation set (Typesense v30+). Collections opt in via the `curation_sets` collection attribute. Replaces the per-collection overrides API removed in v30.",
+		MarkdownDescription: "A global curation set (Typesense v30+). Collections opt in via the `curation_sets` collection attribute. Replaces the per-collection overrides API removed in v30. See the [Typesense API docs](https://typesense.org/docs/30.2/api/curation.html).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -147,28 +145,19 @@ func (r *CurationSetResource) Schema(ctx context.Context, req resource.SchemaReq
 }
 
 func (r *CurationSetResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
-func curationItemsToAPI(items []CurationItemModel) []api.CurationItemCreateSchema {
-	out := make([]api.CurationItemCreateSchema, 0, len(items))
+func curationItemsToAPI(items []CurationItemModel) []typesense.CurationItem {
+	out := make([]typesense.CurationItem, 0, len(items))
 	for _, it := range items {
 		id := it.Id.ValueString()
-		apiItem := api.CurationItemCreateSchema{Id: &id}
+		apiItem := typesense.CurationItem{Id: &id}
 		if it.Rule != nil {
 			apiItem.Rule.Query = it.Rule.Query.ValueStringPointer()
 			apiItem.Rule.FilterBy = it.Rule.FilterBy.ValueStringPointer()
 			if !it.Rule.Match.IsNull() && it.Rule.Match.ValueString() != "" {
-				m := api.CurationRuleMatch(it.Rule.Match.ValueString())
+				m := it.Rule.Match.ValueString()
 				apiItem.Rule.Match = &m
 			}
 			if len(it.Rule.Tags) > 0 {
@@ -177,9 +166,9 @@ func curationItemsToAPI(items []CurationItemModel) []api.CurationItemCreateSchem
 			}
 		}
 		if len(it.Includes) > 0 {
-			incs := make([]api.CurationInclude, 0, len(it.Includes))
+			incs := make([]typesense.CurationInclude, 0, len(it.Includes))
 			for _, i := range it.Includes {
-				incs = append(incs, api.CurationInclude{
+				incs = append(incs, typesense.CurationInclude{
 					Id:       i.Id.ValueString(),
 					Position: int(i.Position.ValueInt64()),
 				})
@@ -187,9 +176,9 @@ func curationItemsToAPI(items []CurationItemModel) []api.CurationItemCreateSchem
 			apiItem.Includes = &incs
 		}
 		if len(it.Excludes) > 0 {
-			exs := make([]api.CurationExclude, 0, len(it.Excludes))
+			exs := make([]typesense.CurationExclude, 0, len(it.Excludes))
 			for _, e := range it.Excludes {
-				exs = append(exs, api.CurationExclude{Id: e.Id.ValueString()})
+				exs = append(exs, typesense.CurationExclude{Id: e.Id.ValueString()})
 			}
 			apiItem.Excludes = &exs
 		}
@@ -212,7 +201,7 @@ func curationItemsToAPI(items []CurationItemModel) []api.CurationItemCreateSchem
 	return out
 }
 
-func curationItemsFromAPI(items []api.CurationItemCreateSchema) []CurationItemModel {
+func curationItemsFromAPI(items []typesense.CurationItem) []CurationItemModel {
 	out := make([]CurationItemModel, 0, len(items))
 	for _, it := range items {
 		m := CurationItemModel{}
@@ -224,7 +213,7 @@ func curationItemsFromAPI(items []api.CurationItemCreateSchema) []CurationItemMo
 			FilterBy: types.StringPointerValue(it.Rule.FilterBy),
 		}
 		if it.Rule.Match != nil {
-			m.Rule.Match = types.StringValue(string(*it.Rule.Match))
+			m.Rule.Match = types.StringValue(*it.Rule.Match)
 		}
 		if it.Rule.Tags != nil {
 			m.Rule.Tags = convertStringArrayToTerraformArray(*it.Rule.Tags)
@@ -268,11 +257,11 @@ func curationItemsFromAPI(items []api.CurationItemCreateSchema) []CurationItemMo
 }
 
 func (r *CurationSetResource) upsert(ctx context.Context, data *CurationSetResourceModel) error {
-	body := &api.CurationSetCreateSchema{
+	body := &typesense.CurationSet{
 		Description: data.Description.ValueStringPointer(),
 		Items:       curationItemsToAPI(data.Items),
 	}
-	result, err := r.client.CurationSet(data.Name.ValueString()).Upsert(ctx, body)
+	result, err := r.client.UpsertCurationSet(ctx, data.Name.ValueString(), body)
 	if err != nil {
 		return err
 	}
@@ -305,9 +294,9 @@ func (r *CurationSetResource) Read(ctx context.Context, req resource.ReadRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	set, err := r.client.CurationSet(data.Id.ValueString()).Retrieve(ctx)
+	set, err := r.client.GetCurationSet(ctx, data.Id.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -343,8 +332,8 @@ func (r *CurationSetResource) Delete(ctx context.Context, req resource.DeleteReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := r.client.CurationSet(data.Id.ValueString()).Delete(ctx)
-	if err != nil && !strings.Contains(err.Error(), "Not Found") {
+	err := r.client.DeleteCurationSet(ctx, data.Id.ValueString())
+	if err != nil && !typesense.IsNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete curation set: %s", err))
 	}
 }

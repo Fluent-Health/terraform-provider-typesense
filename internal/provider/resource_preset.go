@@ -2,8 +2,8 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -14,8 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &PresetResource{}
@@ -41,7 +40,7 @@ func (r *PresetResource) Metadata(ctx context.Context, req resource.MetadataRequ
 
 func (r *PresetResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A search preset stores a JSON blob of search parameters under a name so clients can reference it via the `preset` search parameter.",
+		MarkdownDescription: "A search preset stores a JSON blob of search parameters under a name so clients can reference it via the `preset` search parameter. See the [Typesense API docs](https://typesense.org/docs/30.2/api/search.html#presets).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -66,24 +65,16 @@ func (r *PresetResource) Schema(ctx context.Context, req resource.SchemaRequest,
 }
 
 func (r *PresetResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *PresetResource) upsert(ctx context.Context, data *PresetResourceModel) error {
-	upsertSchema := &api.PresetUpsertSchema{}
-	if err := upsertSchema.Value.UnmarshalJSON([]byte(data.Value.ValueString())); err != nil {
-		return fmt.Errorf("invalid preset value JSON: %w", err)
+	raw := json.RawMessage(data.Value.ValueString())
+	if !json.Valid(raw) {
+		return fmt.Errorf("invalid preset value JSON")
 	}
-	_, err := r.client.Presets().Upsert(ctx, data.Name.ValueString(), upsertSchema)
+	body := &typesense.PresetUpsertSchema{Value: raw}
+	_, err := r.client.UpsertPreset(ctx, data.Name.ValueString(), body)
 	return err
 }
 
@@ -107,9 +98,9 @@ func (r *PresetResource) Read(ctx context.Context, req resource.ReadRequest, res
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	preset, err := r.client.Preset(data.Id.ValueString()).Retrieve(ctx)
+	preset, err := r.client.GetPreset(ctx, data.Id.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -117,12 +108,7 @@ func (r *PresetResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 	data.Name = types.StringValue(preset.Name)
-	valueBytes, err := preset.Value.MarshalJSON()
-	if err != nil {
-		resp.Diagnostics.AddError("JSON error", fmt.Sprintf("Unable to marshal preset value: %s", err))
-		return
-	}
-	data.Value = jsontypes.NewNormalizedValue(string(valueBytes))
+	data.Value = jsontypes.NewNormalizedValue(string(preset.Value))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -147,8 +133,8 @@ func (r *PresetResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 	tflog.Warn(ctx, "Delete preset "+data.Id.ValueString())
-	_, err := r.client.Preset(data.Id.ValueString()).Delete(ctx)
-	if err != nil && !strings.Contains(err.Error(), "Not Found") {
+	err := r.client.DeletePreset(ctx, data.Id.ValueString())
+	if err != nil && !typesense.IsNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete preset: %s", err))
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -20,8 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -62,6 +60,7 @@ type CollectionResourceFieldModel struct {
 	Store           types.Bool                 `tfsdk:"store"`
 	NumDim          types.Int64                `tfsdk:"num_dim"`
 	Reference       types.String               `tfsdk:"reference"`
+	AsyncReference  types.Bool                 `tfsdk:"async_reference"`
 	RangeIndex      types.Bool                 `tfsdk:"range_index"`
 	VecDist         types.String               `tfsdk:"vec_dist"`
 	SymbolsToIndex  []types.String             `tfsdk:"symbols_to_index"`
@@ -75,16 +74,24 @@ type CollectionFieldEmbedModel struct {
 }
 
 type CollectionFieldEmbedModelConfigModel struct {
-	ModelName      types.String `tfsdk:"model_name"`
-	Url            types.String `tfsdk:"url"`
-	AccessToken    types.String `tfsdk:"access_token"`
-	ApiKey         types.String `tfsdk:"api_key"`
-	ClientId       types.String `tfsdk:"client_id"`
-	ClientSecret   types.String `tfsdk:"client_secret"`
-	IndexingPrefix types.String `tfsdk:"indexing_prefix"`
-	ProjectId      types.String `tfsdk:"project_id"`
-	QueryPrefix    types.String `tfsdk:"query_prefix"`
-	RefreshToken   types.String `tfsdk:"refresh_token"`
+	ModelName      types.String                             `tfsdk:"model_name"`
+	Url            types.String                             `tfsdk:"url"`
+	AccessToken    types.String                             `tfsdk:"access_token"`
+	ApiKey         types.String                             `tfsdk:"api_key"`
+	ClientId       types.String                             `tfsdk:"client_id"`
+	ClientSecret   types.String                             `tfsdk:"client_secret"`
+	IndexingPrefix types.String                             `tfsdk:"indexing_prefix"`
+	ProjectId      types.String                             `tfsdk:"project_id"`
+	QueryPrefix    types.String                             `tfsdk:"query_prefix"`
+	RefreshToken   types.String                             `tfsdk:"refresh_token"`
+	Region         types.String                             `tfsdk:"region"`
+	ServiceAccount *CollectionFieldEmbedServiceAccountModel `tfsdk:"service_account"`
+}
+
+type CollectionFieldEmbedServiceAccountModel struct {
+	ClientEmail types.String `tfsdk:"client_email"`
+	PrivateKey  types.String `tfsdk:"private_key"`
+	TokenURI    types.String `tfsdk:"token_uri"`
 }
 
 func (r *CollectionResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -93,7 +100,7 @@ func (r *CollectionResource) Metadata(ctx context.Context, req resource.Metadata
 
 func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Group of related documents which are roughly equivalent to a table in a relational database. Terraform will still remove auto-created fields for collections with auto-type, so you need to manually update the collection schema to match generated fields",
+		MarkdownDescription: "Group of related documents which are roughly equivalent to a table in a relational database. Terraform will still remove auto-created fields for collections with auto-type, so you need to manually update the collection schema to match generated fields. See the [Typesense API docs](https://typesense.org/docs/30.2/api/collections.html).",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -235,6 +242,11 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 							Optional:    true,
 							Description: "Name of a field in another collection that should be linked to this collection so that it can be joined during query (e.g. \"users.id\").",
 						},
+						"async_reference": schema.BoolAttribute{
+							Optional:    true,
+							Computed:    true,
+							Description: "Allow documents to be indexed successfully even when the referenced document doesn't exist yet. Only meaningful when `reference` is set.",
+						},
 						"range_index": schema.BoolAttribute{
 							Optional:    true,
 							Computed:    true,
@@ -324,6 +336,29 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 											Sensitive:   true,
 											Description: "Refresh token for OAuth",
 										},
+										"region": schema.StringAttribute{
+											Optional:    true,
+											Description: "Region for GCP Vertex AI.",
+										},
+									},
+									Blocks: map[string]schema.Block{
+										"service_account": schema.SingleNestedBlock{
+											Attributes: map[string]schema.Attribute{
+												"client_email": schema.StringAttribute{
+													Optional:    true,
+													Description: "Service-account client_email (from the GCP credentials JSON).",
+												},
+												"private_key": schema.StringAttribute{
+													Optional:    true,
+													Sensitive:   true,
+													Description: "Service-account private_key PEM (from the GCP credentials JSON).",
+												},
+												"token_uri": schema.StringAttribute{
+													Optional:    true,
+													Description: "OAuth token endpoint. Defaults to https://oauth2.googleapis.com/token if omitted.",
+												},
+											},
+										},
 									},
 								},
 							},
@@ -336,23 +371,7 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 }
 
 func (r *CollectionResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	client, ok := req.ProviderData.(*typesense.Client)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *CollectionResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -365,7 +384,7 @@ func (r *CollectionResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	schema := &api.CollectionSchema{}
+	schema := &typesense.CollectionCreateSchema{}
 	schema.Name = data.Name.ValueString()
 	schema.DefaultSortingField = data.DefaultSortingField.ValueStringPointer()
 	schema.EnableNestedFields = data.EnableNestedFields.ValueBoolPointer()
@@ -382,14 +401,14 @@ func (r *CollectionResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 	schema.TokenSeparators = &tokensSeparators
 
-	fields := []api.Field{}
+	fields := []typesense.Field{}
 
 	for _, field := range data.Fields {
 		fields = append(fields, filedModelToApiField(field))
 	}
 
 	schema.Fields = fields
-	collection, err := r.client.Collections().Create(ctx, schema)
+	collection, err := r.client.CreateCollection(ctx, schema)
 
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create collection, got error: %s", err))
@@ -435,10 +454,10 @@ func (r *CollectionResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	id := data.Id.ValueString()
 
-	collection, err := r.client.Collection(id).Retrieve(ctx)
+	collection, err := r.client.GetCollection(ctx, id)
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to retrieve collection, got error: %s", err))
@@ -501,7 +520,7 @@ func intPointerValue(ptr *int) types.Int64 {
 	return types.Int64Value(int64(*ptr))
 }
 
-func flattenCollectionFields(fields []api.Field) []CollectionResourceFieldModel {
+func flattenCollectionFields(fields []typesense.Field) []CollectionResourceFieldModel {
 	if fields != nil {
 		fis := make([]CollectionResourceFieldModel, len(fields))
 
@@ -521,6 +540,9 @@ func flattenCollectionFields(fields []api.Field) []CollectionResourceFieldModel 
 			field.NumDim = intPointerValue(fieldResponse.NumDim)
 			if fieldResponse.Reference != nil {
 				field.Reference = types.StringValue(*fieldResponse.Reference)
+			}
+			if fieldResponse.AsyncReference != nil {
+				field.AsyncReference = types.BoolValue(*fieldResponse.AsyncReference)
 			}
 			field.RangeIndex = boolPointerValueWithDefault(fieldResponse.RangeIndex, false)
 			field.VecDist = stringPointerValueWithDefault(fieldResponse.VecDist, "cosine")
@@ -564,7 +586,7 @@ func (r *CollectionResource) Update(ctx context.Context, req resource.UpdateRequ
 		stateItems[state.Fields[i].Name.ValueString()] = state.Fields[i]
 	}
 
-	schema := &api.CollectionUpdateSchema{}
+	schema := &typesense.CollectionUpdateSchema{}
 
 	var drop = new(bool)
 	*drop = true
@@ -580,7 +602,7 @@ func (r *CollectionResource) Update(ctx context.Context, req resource.UpdateRequ
 			// item was changed, need to update
 
 			schema.Fields = append(schema.Fields,
-				api.Field{
+				typesense.Field{
 					Drop: drop,
 					Name: field.Name.ValueString(),
 				},
@@ -598,7 +620,7 @@ func (r *CollectionResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	for _, field := range stateItems {
 		schema.Fields = append(schema.Fields,
-			api.Field{
+			typesense.Field{
 				Drop: drop,
 				Name: field.Name.ValueString(),
 			})
@@ -607,7 +629,7 @@ func (r *CollectionResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	// Only call Typesense API if there are actual field changes
 	if len(schema.Fields) > 0 {
-		_, err := r.client.Collection(state.Id.ValueString()).Update(ctx, schema)
+		_, err := r.client.UpdateCollection(ctx, state.Id.ValueString(), schema)
 
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update collection, got error: %s", err))
@@ -616,7 +638,7 @@ func (r *CollectionResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	// Read back the updated collection to get all computed field attributes
-	collection, err := r.client.Collection(state.Id.ValueString()).Retrieve(ctx)
+	collection, err := r.client.GetCollection(ctx, state.Id.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to retrieve updated collection, got error: %s", err))
 		return
@@ -670,10 +692,10 @@ func (r *CollectionResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 	tflog.Warn(ctx, "###Delete collection with id="+data.Id.ValueString())
 
-	_, err := r.client.Collection(data.Id.ValueString()).Delete(ctx)
+	err := r.client.DeleteCollection(ctx, data.Id.ValueString())
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete collection, got error: %s", err))
@@ -746,6 +768,20 @@ func (r *CollectionResource) ModifyPlan(ctx context.Context, req resource.Modify
 			plan.Fields[i].VecDist = types.StringValue("cosine")
 			modified = true
 		}
+		// async_reference: server returns false-by-default for fields that have
+		// a reference; for non-reference fields the server omits it. Keep plan
+		// and state aligned so we don't get "provider produced inconsistent
+		// result after apply".
+		hasReference := !plan.Fields[i].Reference.IsNull() && !plan.Fields[i].Reference.IsUnknown() && plan.Fields[i].Reference.ValueString() != ""
+		if hasReference {
+			if plan.Fields[i].AsyncReference.IsUnknown() || plan.Fields[i].AsyncReference.IsNull() {
+				plan.Fields[i].AsyncReference = types.BoolValue(false)
+				modified = true
+			}
+		} else if plan.Fields[i].AsyncReference.IsUnknown() {
+			plan.Fields[i].AsyncReference = types.BoolNull()
+			modified = true
+		}
 	}
 
 	if modified {
@@ -753,8 +789,8 @@ func (r *CollectionResource) ModifyPlan(ctx context.Context, req resource.Modify
 	}
 }
 
-func filedModelToApiField(field CollectionResourceFieldModel) api.Field {
-	apiField := api.Field{
+func filedModelToApiField(field CollectionResourceFieldModel) typesense.Field {
+	apiField := typesense.Field{
 		Name:           field.Name.ValueString(),
 		Facet:          field.Facet.ValueBoolPointer(),
 		Index:          field.Index.ValueBoolPointer(),
@@ -767,6 +803,7 @@ func filedModelToApiField(field CollectionResourceFieldModel) api.Field {
 		Locale:         field.Locale.ValueStringPointer(),
 		Store:          field.Store.ValueBoolPointer(),
 		Reference:      field.Reference.ValueStringPointer(),
+		AsyncReference: field.AsyncReference.ValueBoolPointer(),
 		RangeIndex:     field.RangeIndex.ValueBoolPointer(),
 		VecDist:        field.VecDist.ValueStringPointer(),
 	}
@@ -801,12 +838,12 @@ func filedModelToApiField(field CollectionResourceFieldModel) api.Field {
 	return apiField
 }
 
-func fieldEmbedModelToAPI(embed *CollectionFieldEmbedModel) *api.FieldEmbed {
+func fieldEmbedModelToAPI(embed *CollectionFieldEmbedModel) *typesense.FieldEmbed {
 	if embed == nil {
 		return nil
 	}
 
-	embedAPI := &api.FieldEmbed{}
+	embedAPI := &typesense.FieldEmbed{}
 
 	if embed.From != nil {
 		from := make([]string, 0, len(embed.From))
@@ -829,12 +866,21 @@ func fieldEmbedModelToAPI(embed *CollectionFieldEmbedModel) *api.FieldEmbed {
 		embedAPI.ModelConfig.ProjectId = embed.ModelConfig.ProjectId.ValueStringPointer()
 		embedAPI.ModelConfig.QueryPrefix = embed.ModelConfig.QueryPrefix.ValueStringPointer()
 		embedAPI.ModelConfig.RefreshToken = embed.ModelConfig.RefreshToken.ValueStringPointer()
+		embedAPI.ModelConfig.Region = embed.ModelConfig.Region.ValueStringPointer()
+		if sa := embed.ModelConfig.ServiceAccount; sa != nil &&
+			(!sa.ClientEmail.IsNull() || !sa.PrivateKey.IsNull() || !sa.TokenURI.IsNull()) {
+			embedAPI.ModelConfig.ServiceAccount = &typesense.GCPServiceAccount{
+				ClientEmail: sa.ClientEmail.ValueString(),
+				PrivateKey:  sa.PrivateKey.ValueString(),
+				TokenURI:    sa.TokenURI.ValueStringPointer(),
+			}
+		}
 	}
 
 	return embedAPI
 }
 
-func flattenFieldEmbed(embed *api.FieldEmbed) *CollectionFieldEmbedModel {
+func flattenFieldEmbed(embed *typesense.FieldEmbed) *CollectionFieldEmbedModel {
 	if embed == nil {
 		return nil
 	}
@@ -860,6 +906,14 @@ func flattenFieldEmbed(embed *api.FieldEmbed) *CollectionFieldEmbedModel {
 		ProjectId:      types.StringPointerValue(embed.ModelConfig.ProjectId),
 		QueryPrefix:    types.StringPointerValue(embed.ModelConfig.QueryPrefix),
 		RefreshToken:   types.StringPointerValue(embed.ModelConfig.RefreshToken),
+		Region:         types.StringPointerValue(embed.ModelConfig.Region),
+	}
+	if sa := embed.ModelConfig.ServiceAccount; sa != nil {
+		res.ModelConfig.ServiceAccount = &CollectionFieldEmbedServiceAccountModel{
+			ClientEmail: types.StringValue(sa.ClientEmail),
+			PrivateKey:  types.StringValue(sa.PrivateKey),
+			TokenURI:    types.StringPointerValue(sa.TokenURI),
+		}
 	}
 
 	return res

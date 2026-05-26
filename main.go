@@ -8,7 +8,7 @@ import (
 	"flag"
 	"log"
 
-	"ronati-terraform-typesense/internal/provider"
+	"fluent-health-terraform-typesense/internal/provider"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 )

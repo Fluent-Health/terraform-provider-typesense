@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"os"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
@@ -13,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/typesense/typesense-go/v4/typesense"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -117,14 +116,7 @@ func (p *TypesenseProvider) Configure(ctx context.Context, req provider.Configur
 		return
 	}
 
-	// Create a new typesense client using the configuration values
-	client := typesense.NewClient(
-		typesense.WithServer(api_address),
-		typesense.WithAPIKey(api_key),
-		typesense.WithConnectionTimeout(30*time.Second),
-		typesense.WithCircuitBreakerMaxRequests(50),
-		typesense.WithCircuitBreakerInterval(2*time.Minute),
-		typesense.WithCircuitBreakerTimeout(1*time.Minute))
+	client := typesense.NewClient(api_address, api_key)
 
 	// Make the Typesense client available during DataSource and Resource
 	// type Configure methods.

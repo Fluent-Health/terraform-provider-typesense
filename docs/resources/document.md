@@ -3,12 +3,12 @@
 page_title: "typesense_document Resource - typesense"
 subcategory: ""
 description: |-
-  Every record you index in Typesense is called a Document
+  Every record you index in Typesense is called a Document. See the Typesense API docs https://typesense.org/docs/30.2/api/documents.html.
 ---
 
 # typesense_document (Resource)
 
-Every record you index in Typesense is called a Document
+Every record you index in Typesense is called a Document. See the [Typesense API docs](https://typesense.org/docs/30.2/api/documents.html).
 
 ## Example Usage
 

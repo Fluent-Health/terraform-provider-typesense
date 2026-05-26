@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -16,8 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &ApiKeyResource{}
@@ -47,7 +45,7 @@ func (r *ApiKeyResource) Metadata(ctx context.Context, req resource.MetadataRequ
 
 func (r *ApiKeyResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "API Key resource for accessing Typesense collections with specific permissions",
+		MarkdownDescription: "API Key resource for accessing Typesense collections with specific permissions. See the [Typesense API docs](https://typesense.org/docs/30.2/api/api-keys.html).",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -108,21 +106,7 @@ func (r *ApiKeyResource) Schema(ctx context.Context, req resource.SchemaRequest,
 }
 
 func (r *ApiKeyResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-
-	client, ok := req.ProviderData.(*typesense.Client)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-		return
-	}
-
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -144,7 +128,7 @@ func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		collections = append(collections, collection.ValueString())
 	}
 
-	keySchema := &api.ApiKeySchema{
+	keySchema := &typesense.APIKeyCreateSchema{
 		Description: data.Description.ValueString(),
 		Actions:     actions,
 		Collections: collections,
@@ -160,7 +144,7 @@ func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		keySchema.ExpiresAt = &expiresAt
 	}
 
-	apiKey, err := r.client.Keys().Create(ctx, keySchema)
+	apiKey, err := r.client.CreateAPIKey(ctx, keySchema)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create API key, got error: %s", err))
 		return
@@ -217,9 +201,9 @@ func (r *ApiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	apiKey, err := r.client.Key(keyId).Retrieve(ctx)
+	apiKey, err := r.client.GetAPIKey(ctx, keyId)
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to retrieve API key, got error: %s", err))
@@ -280,9 +264,9 @@ func (r *ApiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	tflog.Info(ctx, "Delete API key with id="+id)
 
-	_, err = r.client.Key(keyId).Delete(ctx)
+	err = r.client.DeleteAPIKey(ctx, keyId)
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 		} else {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete API key, got error: %s", err))

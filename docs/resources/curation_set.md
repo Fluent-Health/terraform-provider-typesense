@@ -3,12 +3,12 @@
 page_title: "typesense_curation_set Resource - typesense"
 subcategory: ""
 description: |-
-  A global curation set (Typesense v30+). Collections opt in via the curation_sets collection attribute. Replaces the per-collection overrides API removed in v30.
+  A global curation set (Typesense v30+). Collections opt in via the curation_sets collection attribute. Replaces the per-collection overrides API removed in v30. See the Typesense API docs https://typesense.org/docs/30.2/api/curation.html.
 ---
 
 # typesense_curation_set (Resource)
 
-A global curation set (Typesense v30+). Collections opt in via the `curation_sets` collection attribute. Replaces the per-collection overrides API removed in v30.
+A global curation set (Typesense v30+). Collections opt in via the `curation_sets` collection attribute. Replaces the per-collection overrides API removed in v30. See the [Typesense API docs](https://typesense.org/docs/30.2/api/curation.html).
 
 ## Example Usage
 

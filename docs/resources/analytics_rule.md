@@ -3,12 +3,12 @@
 page_title: "typesense_analytics_rule Resource - typesense"
 subcategory: ""
 description: |-
-  An analytics rule (Typesense v30+ shape). Aggregates events from a source collection into a destination collection.
+  An analytics rule (Typesense v30+ shape). Aggregates events from a source collection into a destination collection. See the Typesense API docs https://typesense.org/docs/30.2/api/analytics-query-suggestions.html.
 ---
 
 # typesense_analytics_rule (Resource)
 
-An analytics rule (Typesense v30+ shape). Aggregates events from a source collection into a destination collection.
+An analytics rule (Typesense v30+ shape). Aggregates events from a source collection into a destination collection. See the [Typesense API docs](https://typesense.org/docs/30.2/api/analytics-query-suggestions.html).
 
 ## Example Usage
 

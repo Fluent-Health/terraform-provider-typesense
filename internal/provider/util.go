@@ -6,8 +6,31 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"fluent-health-terraform-typesense/internal/typesense"
 )
+
+// configureClient pulls *typesense.Client out of req.ProviderData with the
+// standard nil-and-type-assertion dance every resource's Configure needs.
+// Returns nil when the provider hasn't been configured yet (early-apply); the
+// caller should just return in that case. On a type mismatch it records a
+// diagnostic and also returns nil.
+func configureClient(req resource.ConfigureRequest, resp *resource.ConfigureResponse) *typesense.Client {
+	if req.ProviderData == nil {
+		return nil
+	}
+	c, ok := req.ProviderData.(*typesense.Client)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *typesense.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+		return nil
+	}
+	return c
+}
 
 // convert []types.String to []string
 func convertTerraformArrayToStringArray(array []types.String) []string {

@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -12,8 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &NLSearchModelResource{}
@@ -28,25 +26,34 @@ type NLSearchModelResource struct {
 }
 
 type NLSearchModelResourceModel struct {
-	Id              types.String   `tfsdk:"id"`
-	ModelName       types.String   `tfsdk:"model_name"`
-	ApiKey          types.String   `tfsdk:"api_key"`
-	ApiUrl          types.String   `tfsdk:"api_url"`
-	ApiVersion      types.String   `tfsdk:"api_version"`
-	SystemPrompt    types.String   `tfsdk:"system_prompt"`
-	MaxBytes        types.Int64    `tfsdk:"max_bytes"`
-	Temperature     types.Float64  `tfsdk:"temperature"`
-	TopK            types.Int64    `tfsdk:"top_k"`
-	TopP            types.Float64  `tfsdk:"top_p"`
-	MaxOutputTokens types.Int64    `tfsdk:"max_output_tokens"`
-	StopSequences   []types.String `tfsdk:"stop_sequences"`
-	AccountId       types.String   `tfsdk:"account_id"`
-	AccessToken     types.String   `tfsdk:"access_token"`
-	RefreshToken    types.String   `tfsdk:"refresh_token"`
-	ClientId        types.String   `tfsdk:"client_id"`
-	ClientSecret    types.String   `tfsdk:"client_secret"`
-	ProjectId       types.String   `tfsdk:"project_id"`
-	Region          types.String   `tfsdk:"region"`
+	Id              types.String            `tfsdk:"id"`
+	ModelName       types.String            `tfsdk:"model_name"`
+	ApiKey          types.String            `tfsdk:"api_key"`
+	ApiUrl          types.String            `tfsdk:"api_url"`
+	ApiVersion      types.String            `tfsdk:"api_version"`
+	SystemPrompt    types.String            `tfsdk:"system_prompt"`
+	MaxBytes        types.Int64             `tfsdk:"max_bytes"`
+	Temperature     types.Float64           `tfsdk:"temperature"`
+	TopK            types.Int64             `tfsdk:"top_k"`
+	TopP            types.Float64           `tfsdk:"top_p"`
+	MaxOutputTokens types.Int64             `tfsdk:"max_output_tokens"`
+	StopSequences   []types.String          `tfsdk:"stop_sequences"`
+	AccountId       types.String            `tfsdk:"account_id"`
+	AccessToken     types.String            `tfsdk:"access_token"`
+	RefreshToken    types.String            `tfsdk:"refresh_token"`
+	ClientId        types.String            `tfsdk:"client_id"`
+	ClientSecret    types.String            `tfsdk:"client_secret"`
+	ProjectId       types.String            `tfsdk:"project_id"`
+	Region          types.String            `tfsdk:"region"`
+	ServiceAccount  *GCPServiceAccountModel `tfsdk:"service_account"`
+}
+
+// GCPServiceAccountModel is the Terraform shape for a GCP service-account
+// credential, shared with the collection embed model_config block.
+type GCPServiceAccountModel struct {
+	ClientEmail types.String `tfsdk:"client_email"`
+	PrivateKey  types.String `tfsdk:"private_key"`
+	TokenURI    types.String `tfsdk:"token_uri"`
 }
 
 func (r *NLSearchModelResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -55,7 +62,7 @@ func (r *NLSearchModelResource) Metadata(ctx context.Context, req resource.Metad
 
 func (r *NLSearchModelResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM.",
+		MarkdownDescription: "A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM. See the [Typesense API docs](https://typesense.org/docs/30.2/api/natural-language-search.html).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -100,24 +107,35 @@ func (r *NLSearchModelResource) Schema(ctx context.Context, req resource.SchemaR
 			"project_id":    schema.StringAttribute{Optional: true, MarkdownDescription: "Project ID (GCP Vertex AI)."},
 			"region":        schema.StringAttribute{Optional: true, MarkdownDescription: "Region (GCP Vertex AI)."},
 		},
+		Blocks: map[string]schema.Block{
+			"service_account": schema.SingleNestedBlock{
+				MarkdownDescription: "GCP service-account credential. Alternative to the access_token/refresh_token/client_id/client_secret tuple; recommended for managed Vertex AI embedders since there's no refresh-token rotation.",
+				Attributes: map[string]schema.Attribute{
+					"client_email": schema.StringAttribute{
+						Optional:    true,
+						Description: "Service-account client_email (from the GCP credentials JSON).",
+					},
+					"private_key": schema.StringAttribute{
+						Optional:    true,
+						Sensitive:   true,
+						Description: "Service-account private_key PEM (from the GCP credentials JSON).",
+					},
+					"token_uri": schema.StringAttribute{
+						Optional:    true,
+						Description: "OAuth token endpoint. Defaults to https://oauth2.googleapis.com/token if omitted.",
+					},
+				},
+			},
+		},
 	}
 }
 
 func (r *NLSearchModelResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
-func nlModelToCreateSchema(d *NLSearchModelResourceModel) *api.NLSearchModelCreateSchema {
-	out := &api.NLSearchModelCreateSchema{
+func nlModelToCreateSchema(d *NLSearchModelResourceModel) *typesense.NLSearchModelUpsertSchema {
+	out := &typesense.NLSearchModelUpsertSchema{
 		ModelName:    d.ModelName.ValueStringPointer(),
 		ApiKey:       d.ApiKey.ValueStringPointer(),
 		ApiUrl:       d.ApiUrl.ValueStringPointer(),
@@ -155,10 +173,18 @@ func nlModelToCreateSchema(d *NLSearchModelResourceModel) *api.NLSearchModelCrea
 		ss := convertTerraformArrayToStringArray(d.StopSequences)
 		out.StopSequences = &ss
 	}
+	if sa := d.ServiceAccount; sa != nil &&
+		(!sa.ClientEmail.IsNull() || !sa.PrivateKey.IsNull() || !sa.TokenURI.IsNull()) {
+		out.ServiceAccount = &typesense.GCPServiceAccount{
+			ClientEmail: sa.ClientEmail.ValueString(),
+			PrivateKey:  sa.PrivateKey.ValueString(),
+			TokenURI:    sa.TokenURI.ValueStringPointer(),
+		}
+	}
 	return out
 }
 
-func applyNLSchemaToModel(s *api.NLSearchModelSchema, d *NLSearchModelResourceModel) {
+func applyNLSchemaToModel(s *typesense.NLSearchModel, d *NLSearchModelResourceModel) {
 	d.Id = types.StringValue(s.Id)
 	if s.ModelName != nil {
 		d.ModelName = types.StringValue(*s.ModelName)
@@ -202,6 +228,13 @@ func applyNLSchemaToModel(s *api.NLSearchModelSchema, d *NLSearchModelResourceMo
 	if s.ClientId != nil {
 		d.ClientId = types.StringValue(*s.ClientId)
 	}
+	if s.ServiceAccount != nil {
+		d.ServiceAccount = &GCPServiceAccountModel{
+			ClientEmail: types.StringValue(s.ServiceAccount.ClientEmail),
+			PrivateKey:  types.StringValue(s.ServiceAccount.PrivateKey),
+			TokenURI:    types.StringPointerValue(s.ServiceAccount.TokenURI),
+		}
+	}
 	// api_key, access_token, refresh_token, client_secret are sensitive and not echoed; keep state values.
 }
 
@@ -212,7 +245,7 @@ func (r *NLSearchModelResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 	body := nlModelToCreateSchema(&data)
-	model, err := r.client.NLSearchModels().Create(ctx, body)
+	model, err := r.client.CreateNLSearchModel(ctx, body)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create NL search model: %s", err))
 		return
@@ -227,9 +260,9 @@ func (r *NLSearchModelResource) Read(ctx context.Context, req resource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	model, err := r.client.NLSearchModel(data.Id.ValueString()).Retrieve(ctx)
+	model, err := r.client.GetNLSearchModel(ctx, data.Id.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") || strings.Contains(err.Error(), "not found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -246,9 +279,8 @@ func (r *NLSearchModelResource) Update(ctx context.Context, req resource.UpdateR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// NLSearchModelUpdateSchema is a Go type alias for NLSearchModelCreateSchema.
 	body := nlModelToCreateSchema(&data)
-	model, err := r.client.NLSearchModel(data.Id.ValueString()).Update(ctx, body)
+	model, err := r.client.UpdateNLSearchModel(ctx, data.Id.ValueString(), body)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update NL search model: %s", err))
 		return
@@ -263,8 +295,8 @@ func (r *NLSearchModelResource) Delete(ctx context.Context, req resource.DeleteR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := r.client.NLSearchModel(data.Id.ValueString()).Delete(ctx)
-	if err != nil && !strings.Contains(err.Error(), "Not Found") && !strings.Contains(err.Error(), "not found") {
+	err := r.client.DeleteNLSearchModel(ctx, data.Id.ValueString())
+	if err != nil && !typesense.IsNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete NL search model: %s", err))
 	}
 }

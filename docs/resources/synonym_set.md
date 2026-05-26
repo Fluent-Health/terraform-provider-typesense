@@ -3,12 +3,12 @@
 page_title: "typesense_synonym_set Resource - typesense"
 subcategory: ""
 description: |-
-  A global synonym set (Typesense v30+). Collections opt in via the synonym_sets collection attribute. Replaces the legacy per-collection typesense_synonym resource that was removed in v30.
+  A global synonym set (Typesense v30+). Collections opt in via the synonym_sets collection attribute. Replaces the legacy per-collection typesense_synonym resource that was removed in v30. See the Typesense API docs https://typesense.org/docs/30.2/api/synonyms.html.
 ---
 
 # typesense_synonym_set (Resource)
 
-A global synonym set (Typesense v30+). Collections opt in via the `synonym_sets` collection attribute. Replaces the legacy per-collection `typesense_synonym` resource that was removed in v30.
+A global synonym set (Typesense v30+). Collections opt in via the `synonym_sets` collection attribute. Replaces the legacy per-collection `typesense_synonym` resource that was removed in v30. See the [Typesense API docs](https://typesense.org/docs/30.2/api/synonyms.html).
 
 ## Example Usage
 

@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -12,8 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/typesense/typesense-go/v4/typesense"
-	"github.com/typesense/typesense-go/v4/typesense/api"
+	"fluent-health-terraform-typesense/internal/typesense"
 )
 
 var _ resource.Resource = &ConversationModelResource{}
@@ -45,7 +43,7 @@ func (r *ConversationModelResource) Metadata(ctx context.Context, req resource.M
 
 func (r *ConversationModelResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A conversation model configures Typesense's RAG-style conversational search. References an external LLM (OpenAI, Cloudflare, vLLM) and the Typesense collection that stores chat history.",
+		MarkdownDescription: "A conversation model configures Typesense's RAG-style conversational search. References an external LLM (OpenAI, Cloudflare, vLLM) and the Typesense collection that stores chat history. See the [Typesense API docs](https://typesense.org/docs/30.2/api/conversational-search-rag.html).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -89,16 +87,7 @@ func (r *ConversationModelResource) Schema(ctx context.Context, req resource.Sch
 }
 
 func (r *ConversationModelResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *ConversationModelResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -108,7 +97,7 @@ func (r *ConversationModelResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	body := &api.ConversationModelCreateSchema{
+	body := &typesense.ConversationModelCreateSchema{
 		ModelName:         data.ModelName.ValueString(),
 		HistoryCollection: data.HistoryCollection.ValueString(),
 		MaxBytes:          int(data.MaxBytes.ValueInt64()),
@@ -122,7 +111,7 @@ func (r *ConversationModelResource) Create(ctx context.Context, req resource.Cre
 		body.Ttl = &v
 	}
 
-	model, err := r.client.Conversations().Models().Create(ctx, body)
+	model, err := r.client.CreateConversationModel(ctx, body)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create conversation model: %s", err))
 		return
@@ -140,9 +129,9 @@ func (r *ConversationModelResource) Read(ctx context.Context, req resource.ReadR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	model, err := r.client.Conversations().Model(data.Id.ValueString()).Retrieve(ctx)
+	model, err := r.client.GetConversationModel(ctx, data.Id.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "Not Found") || strings.Contains(err.Error(), "not found") {
+		if typesense.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -175,7 +164,7 @@ func (r *ConversationModelResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 	maxBytes := int(data.MaxBytes.ValueInt64())
-	body := &api.ConversationModelUpdateSchema{
+	body := &typesense.ConversationModelUpdateSchema{
 		ModelName:         data.ModelName.ValueStringPointer(),
 		HistoryCollection: data.HistoryCollection.ValueStringPointer(),
 		ApiKey:            data.ApiKey.ValueStringPointer(),
@@ -188,7 +177,7 @@ func (r *ConversationModelResource) Update(ctx context.Context, req resource.Upd
 		v := int(data.Ttl.ValueInt64())
 		body.Ttl = &v
 	}
-	model, err := r.client.Conversations().Model(data.Id.ValueString()).Update(ctx, body)
+	model, err := r.client.UpdateConversationModel(ctx, data.Id.ValueString(), body)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update conversation model: %s", err))
 		return
@@ -205,8 +194,8 @@ func (r *ConversationModelResource) Delete(ctx context.Context, req resource.Del
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := r.client.Conversations().Model(data.Id.ValueString()).Delete(ctx)
-	if err != nil && !strings.Contains(err.Error(), "Not Found") && !strings.Contains(err.Error(), "not found") {
+	err := r.client.DeleteConversationModel(ctx, data.Id.ValueString())
+	if err != nil && !typesense.IsNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete conversation model: %s", err))
 	}
 }

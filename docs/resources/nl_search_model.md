@@ -3,12 +3,12 @@
 page_title: "typesense_nl_search_model Resource - typesense"
 subcategory: ""
 description: |-
-  A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM.
+  A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM. See the Typesense API docs https://typesense.org/docs/30.2/api/natural-language-search.html.
 ---
 
 # typesense_nl_search_model (Resource)
 
-A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM.
+A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM. See the [Typesense API docs](https://typesense.org/docs/30.2/api/natural-language-search.html).
 
 ## Example Usage
 
@@ -22,6 +22,23 @@ resource "typesense_nl_search_model" "rewriter" {
   model_name    = "openai/gpt-4o-mini"
   api_key       = var.openai_api_key
   system_prompt = "Rewrite the natural-language query into a Typesense filter_by clause."
+}
+
+# GCP Vertex AI via service-account credentials — the recommended auth path for
+# managed Gemini models (no refresh-token rotation to babysit). Equivalent to
+# what you'd otherwise do via a raw POST /nl_search_models call.
+resource "typesense_nl_search_model" "gemini" {
+  model_name  = "gcp/gemini-2.5-flash"
+  project_id  = "my-gcp-project"
+  region      = "us-central1"
+  max_bytes   = 16000
+  temperature = 0.0
+
+  service_account {
+    client_email = "vertex-nl@my-gcp-project.iam.gserviceaccount.com"
+    private_key  = file("${path.module}/vertex-sa-private-key.pem")
+    # token_uri defaults to https://oauth2.googleapis.com/token
+  }
 }
 ```
 
@@ -46,6 +63,7 @@ resource "typesense_nl_search_model" "rewriter" {
 - `project_id` (String) Project ID (GCP Vertex AI).
 - `refresh_token` (String, Sensitive) Refresh token (GCP Vertex AI).
 - `region` (String) Region (GCP Vertex AI).
+- `service_account` (Block, Optional) GCP service-account credential. Alternative to the access_token/refresh_token/client_id/client_secret tuple; recommended for managed Vertex AI embedders since there's no refresh-token rotation. (see [below for nested schema](#nestedblock--service_account))
 - `stop_sequences` (List of String)
 - `system_prompt` (String)
 - `temperature` (Number)
@@ -55,6 +73,15 @@ resource "typesense_nl_search_model" "rewriter" {
 ### Read-Only
 
 - `id` (String) The ID of this resource.
+
+<a id="nestedblock--service_account"></a>
+### Nested Schema for `service_account`
+
+Optional:
+
+- `client_email` (String) Service-account client_email (from the GCP credentials JSON).
+- `private_key` (String, Sensitive) Service-account private_key PEM (from the GCP credentials JSON).
+- `token_uri` (String) OAuth token endpoint. Defaults to https://oauth2.googleapis.com/token if omitted.
 
 ## Import
 
