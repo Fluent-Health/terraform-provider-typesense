@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -986,7 +987,7 @@ func flattenFieldEmbed(embed *typesense.FieldEmbed, prior *CollectionFieldEmbedM
 // every document in the collection, so we want to avoid it unless something
 // actually changed on the server side.
 //
-// Asymmetric absorption normalizes two classes of state-vs-plan mismatch
+// Asymmetric absorption normalizes four classes of state-vs-plan mismatch
 // that aren't user-driven changes:
 //
 //  1. Write-only sensitive embed credentials (access_token, api_key,
@@ -1001,15 +1002,57 @@ func flattenFieldEmbed(embed *typesense.FieldEmbed, prior *CollectionFieldEmbedM
 //     fields, so post-import state has a concrete value while plan stays
 //     null. Treat as equal — the server keeps computing it.
 //
+//  3. Server-redacted credential-like embed fields (model_config.client_id,
+//     model_config.project_id, model_config.service_account.client_email):
+//     Typesense 30.x masks these on GET as a defensive measure, returning
+//     values like "fh-de*****" or "***********" instead of the real
+//     string. The provider's flatten faithfully copies the masked value
+//     into state; plan carries the user's real value from HCL (when HCL
+//     sets it) or Unknown (when HCL leaves the Optional+Computed slot
+//     empty). Treat state-masked vs plan-non-null/Unknown as equal — the
+//     server already holds the real value. Masking detection keys off
+//     five or more consecutive asterisks (Typesense's shortest observed
+//     redaction).
+//
+//  4. Server-echoed Optional+Computed embed.model_config fields
+//     (client_id, indexing_prefix, project_id, query_prefix, url):
+//     Typesense returns these as concrete strings (often "") even when
+//     HCL never set them. State picks up the concrete value via flatten;
+//     plan resolves them to Unknown (Optional+Computed without
+//     UseStateForUnknown). Treat state-non-null vs plan-Unknown as equal
+//     — the framework would have resolved Unknown to "use whatever the
+//     server returns", which is what state already holds. Doing this in
+//     the equivalence layer instead of via UseStateForUnknown at the
+//     schema layer avoids writing masked credentials back to the server
+//     on a real, unrelated Update.
+//
 // The asymmetries are deliberately one-directional. For sensitive fields,
 // state-null vs plan-non-null is the post-import gap (suppress); but
 // state-non-null vs plan-different-non-null is a real rotation (do not
 // suppress — let drop+add fire so the new value reaches the server). For
 // num_dim, state-non-null vs plan-null is the auto-embed import path
 // (suppress); but state-non-null vs plan-different-non-null is a manual
-// vector field's dim change (do not suppress).
+// vector field's dim change (do not suppress). For server-redacted fields,
+// state-masked vs plan-non-null/Unknown is the round-trip-through-server
+// case (suppress); but state-unmasked vs plan-different-non-null is a
+// genuine config change (do not suppress). For server-echoed
+// Optional+Computed fields, state-non-null vs plan-Unknown is the
+// HCL-leaves-it-to-the-server case (suppress); but state-non-null vs
+// plan-different-non-null is a user-driven set (do not suppress).
 func fieldsEqual(state, plan CollectionResourceFieldModel) bool {
 	return reflect.DeepEqual(absorbPostImportSensitive(state, plan), plan)
+}
+
+// isServerRedacted reports whether s looks like Typesense's "redacted on
+// read" pattern (five or more consecutive asterisks). Used by
+// absorbPostImportSensitive to identify state values that the server
+// masked on GET so they can be treated as matching the user's real plan
+// value.
+func isServerRedacted(s types.String) bool {
+	if s.IsNull() || s.IsUnknown() {
+		return false
+	}
+	return strings.Contains(s.ValueString(), "*****")
 }
 
 // absorbPostImportSensitive returns a copy of `state` with post-import
@@ -1037,6 +1080,38 @@ func absorbPostImportSensitive(state, plan CollectionResourceFieldModel) Collect
 	fillIfStateNull(&cfgCopy.ClientSecret, plan.Embed.ModelConfig.ClientSecret)
 	fillIfStateNull(&cfgCopy.RefreshToken, plan.Embed.ModelConfig.RefreshToken)
 
+	// Server-redacted credential-like fields on the model_config. State
+	// has the masked value, plan has the real one — treat as equal.
+	fillIfStateRedacted := func(s *types.String, p types.String) {
+		if isServerRedacted(*s) && !p.IsNull() {
+			*s = p
+		}
+	}
+	fillIfStateRedacted(&cfgCopy.ClientId, plan.Embed.ModelConfig.ClientId)
+	fillIfStateRedacted(&cfgCopy.ProjectId, plan.Embed.ModelConfig.ProjectId)
+
+	// Server-echoed Optional+Computed model_config fields. Typesense's
+	// GET returns these populated (often as empty strings, e.g.
+	// indexing_prefix="", or as the masked values handled above). HCL
+	// rarely sets them, so the framework resolves plan to Unknown
+	// (Optional+Computed without UseStateForUnknown). Without this
+	// absorb, state-"" vs plan-Unknown would trip reflect.DeepEqual and
+	// fire drop+add even after the masking absorb runs. UseStateForUnknown
+	// at the schema layer would have the same effect, but copying the
+	// state value into plan risks writing masked credentials back to the
+	// server on a real Update — keeping the bridging here in the
+	// equivalence layer avoids that.
+	fillIfStateNonNullPlanUnknown := func(s *types.String, p types.String) {
+		if !s.IsNull() && p.IsUnknown() {
+			*s = p
+		}
+	}
+	fillIfStateNonNullPlanUnknown(&cfgCopy.ClientId, plan.Embed.ModelConfig.ClientId)
+	fillIfStateNonNullPlanUnknown(&cfgCopy.IndexingPrefix, plan.Embed.ModelConfig.IndexingPrefix)
+	fillIfStateNonNullPlanUnknown(&cfgCopy.ProjectId, plan.Embed.ModelConfig.ProjectId)
+	fillIfStateNonNullPlanUnknown(&cfgCopy.QueryPrefix, plan.Embed.ModelConfig.QueryPrefix)
+	fillIfStateNonNullPlanUnknown(&cfgCopy.Url, plan.Embed.ModelConfig.Url)
+
 	switch {
 	case cfgCopy.ServiceAccount == nil && plan.Embed.ModelConfig.ServiceAccount != nil:
 		// Whole service_account block missing in state (server didn't echo it
@@ -1047,6 +1122,7 @@ func absorbPostImportSensitive(state, plan CollectionResourceFieldModel) Collect
 		saCopy := *cfgCopy.ServiceAccount
 		cfgCopy.ServiceAccount = &saCopy
 		fillIfStateNull(&saCopy.PrivateKey, plan.Embed.ModelConfig.ServiceAccount.PrivateKey)
+		fillIfStateRedacted(&saCopy.ClientEmail, plan.Embed.ModelConfig.ServiceAccount.ClientEmail)
 	}
 
 	result := state
