@@ -82,8 +82,6 @@ func (c *Client) doWithContentType(ctx context.Context, method, path string, que
 	var reqBody io.Reader
 	if body != nil {
 		switch b := body.(type) {
-		case nil:
-			// no body
 		case json.RawMessage:
 			reqBody = bytes.NewReader(b)
 		case []byte:
