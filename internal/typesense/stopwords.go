@@ -21,6 +21,7 @@ type StopwordsUpsertSchema struct {
 }
 
 // UpsertStopwords creates or replaces a stopwords set.
+// PUT /stopwords/{name} — https://typesense.org/docs/30.2/api/stopwords.html#upsert-a-stopwords-set
 func (c *Client) UpsertStopwords(ctx context.Context, name string, body *StopwordsUpsertSchema) (*Stopwords, error) {
 	out := &Stopwords{}
 	if err := c.do(ctx, "PUT", "/stopwords/"+name, nil, body, out); err != nil {
@@ -34,6 +35,7 @@ func (c *Client) UpsertStopwords(ctx context.Context, name string, body *Stopwor
 
 // GetStopwords retrieves a stopwords set by name. The server wraps the set in
 // a top-level "stopwords" object; this method unwraps it.
+// GET /stopwords/{name} — https://typesense.org/docs/30.2/api/stopwords.html#retrieve-a-stopwords-set
 func (c *Client) GetStopwords(ctx context.Context, name string) (*Stopwords, error) {
 	env := &stopwordsGetEnvelope{}
 	if err := c.do(ctx, "GET", "/stopwords/"+name, nil, nil, env); err != nil {
@@ -43,6 +45,7 @@ func (c *Client) GetStopwords(ctx context.Context, name string) (*Stopwords, err
 }
 
 // DeleteStopwords removes a stopwords set.
+// DELETE /stopwords/{name} — https://typesense.org/docs/30.2/api/stopwords.html#delete-a-stopwords-set
 func (c *Client) DeleteStopwords(ctx context.Context, name string) error {
 	return c.do(ctx, "DELETE", "/stopwords/"+name, nil, nil, nil)
 }

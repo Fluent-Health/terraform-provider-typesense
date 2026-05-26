@@ -3,12 +3,12 @@
 page_title: "typesense_preset Resource - typesense"
 subcategory: ""
 description: |-
-  A search preset stores a JSON blob of search parameters under a name so clients can reference it via the preset search parameter.
+  A search preset stores a JSON blob of search parameters under a name so clients can reference it via the preset search parameter. See the Typesense API docs https://typesense.org/docs/30.2/api/search.html#presets.
 ---
 
 # typesense_preset (Resource)
 
-A search preset stores a JSON blob of search parameters under a name so clients can reference it via the `preset` search parameter.
+A search preset stores a JSON blob of search parameters under a name so clients can reference it via the `preset` search parameter. See the [Typesense API docs](https://typesense.org/docs/30.2/api/search.html#presets).
 
 ## Example Usage
 

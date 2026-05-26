@@ -19,8 +19,8 @@ type StemmingDictionary struct {
 	Words []StemmingDictionaryWord `json:"words"`
 }
 
-// UpsertStemmingDictionary uploads the given word→root mappings as JSONL to
-// POST /stemming/dictionaries/import?id={name}.
+// UpsertStemmingDictionary uploads the given word→root mappings as JSONL.
+// POST /stemming/dictionaries/import?id={name} — https://typesense.org/docs/30.2/api/stemming.html#import-stemming-dictionary
 func (c *Client) UpsertStemmingDictionary(ctx context.Context, name string, words []StemmingDictionaryWord) error {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -34,6 +34,7 @@ func (c *Client) UpsertStemmingDictionary(ctx context.Context, name string, word
 }
 
 // GetStemmingDictionary retrieves a stemming dictionary by id.
+// GET /stemming/dictionaries/{id} — https://typesense.org/docs/30.2/api/stemming.html#retrieve-a-stemming-dictionary
 func (c *Client) GetStemmingDictionary(ctx context.Context, id string) (*StemmingDictionary, error) {
 	out := &StemmingDictionary{}
 	if err := c.do(ctx, "GET", "/stemming/dictionaries/"+id, nil, nil, out); err != nil {

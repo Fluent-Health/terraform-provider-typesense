@@ -44,6 +44,7 @@ type CurationSet struct {
 }
 
 // UpsertCurationSet creates or replaces a curation set.
+// PUT /curation_sets/{name} — https://typesense.org/docs/30.2/api/curation.html#create-or-update-a-curation-set
 func (c *Client) UpsertCurationSet(ctx context.Context, name string, body *CurationSet) (*CurationSet, error) {
 	out := &CurationSet{}
 	if err := c.do(ctx, "PUT", "/curation_sets/"+name, nil, body, out); err != nil {
@@ -53,6 +54,7 @@ func (c *Client) UpsertCurationSet(ctx context.Context, name string, body *Curat
 }
 
 // GetCurationSet retrieves a curation set by name.
+// GET /curation_sets/{name} — https://typesense.org/docs/30.2/api/curation.html#retrieve-a-curation-set
 func (c *Client) GetCurationSet(ctx context.Context, name string) (*CurationSet, error) {
 	out := &CurationSet{}
 	if err := c.do(ctx, "GET", "/curation_sets/"+name, nil, nil, out); err != nil {
@@ -62,6 +64,7 @@ func (c *Client) GetCurationSet(ctx context.Context, name string) (*CurationSet,
 }
 
 // DeleteCurationSet removes a curation set.
+// DELETE /curation_sets/{name} — https://typesense.org/docs/30.2/api/curation.html#delete-a-curation-set
 func (c *Client) DeleteCurationSet(ctx context.Context, name string) error {
 	return c.do(ctx, "DELETE", "/curation_sets/"+name, nil, nil, nil)
 }

@@ -3,12 +3,12 @@
 page_title: "typesense_api_key Resource - typesense"
 subcategory: ""
 description: |-
-  API Key resource for accessing Typesense collections with specific permissions
+  API Key resource for accessing Typesense collections with specific permissions. See the Typesense API docs https://typesense.org/docs/30.2/api/api-keys.html.
 ---
 
 # typesense_api_key (Resource)
 
-API Key resource for accessing Typesense collections with specific permissions
+API Key resource for accessing Typesense collections with specific permissions. See the [Typesense API docs](https://typesense.org/docs/30.2/api/api-keys.html).
 
 ## Example Usage
 

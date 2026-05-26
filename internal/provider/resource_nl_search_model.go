@@ -53,7 +53,7 @@ func (r *NLSearchModelResource) Metadata(ctx context.Context, req resource.Metad
 
 func (r *NLSearchModelResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM.",
+		MarkdownDescription: "A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM. See the [Typesense API docs](https://typesense.org/docs/30.2/api/natural-language-search.html).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -102,16 +102,7 @@ func (r *NLSearchModelResource) Schema(ctx context.Context, req resource.SchemaR
 }
 
 func (r *NLSearchModelResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func nlModelToCreateSchema(d *NLSearchModelResourceModel) *typesense.NLSearchModelUpsertSchema {

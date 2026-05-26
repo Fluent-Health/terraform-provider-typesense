@@ -14,6 +14,7 @@ type AliasUpsertSchema struct {
 }
 
 // UpsertAlias creates or updates an alias.
+// PUT /aliases/{name} — https://typesense.org/docs/30.2/api/collection-alias.html#create-or-update-an-alias
 func (c *Client) UpsertAlias(ctx context.Context, name string, body *AliasUpsertSchema) (*CollectionAlias, error) {
 	out := &CollectionAlias{}
 	if err := c.do(ctx, "PUT", "/aliases/"+name, nil, body, out); err != nil {
@@ -23,6 +24,7 @@ func (c *Client) UpsertAlias(ctx context.Context, name string, body *AliasUpsert
 }
 
 // GetAlias retrieves an alias by name.
+// GET /aliases/{name} — https://typesense.org/docs/30.2/api/collection-alias.html#retrieve-an-alias
 func (c *Client) GetAlias(ctx context.Context, name string) (*CollectionAlias, error) {
 	out := &CollectionAlias{}
 	if err := c.do(ctx, "GET", "/aliases/"+name, nil, nil, out); err != nil {
@@ -32,6 +34,7 @@ func (c *Client) GetAlias(ctx context.Context, name string) (*CollectionAlias, e
 }
 
 // DeleteAlias removes an alias.
+// DELETE /aliases/{name} — https://typesense.org/docs/30.2/api/collection-alias.html#delete-an-alias
 func (c *Client) DeleteAlias(ctx context.Context, name string) error {
 	return c.do(ctx, "DELETE", "/aliases/"+name, nil, nil, nil)
 }

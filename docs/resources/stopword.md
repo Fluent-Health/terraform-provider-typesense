@@ -3,12 +3,12 @@
 page_title: "typesense_stopword Resource - typesense"
 subcategory: ""
 description: |-
-  A stopwords set is a named list of common words removed from search queries that reference this set via the stopwords search parameter.
+  A stopwords set is a named list of common words removed from search queries that reference this set via the stopwords search parameter. See the Typesense API docs https://typesense.org/docs/30.2/api/stopwords.html.
 ---
 
 # typesense_stopword (Resource)
 
-A stopwords set is a named list of common words removed from search queries that reference this set via the `stopwords` search parameter.
+A stopwords set is a named list of common words removed from search queries that reference this set via the `stopwords` search parameter. See the [Typesense API docs](https://typesense.org/docs/30.2/api/stopwords.html).
 
 ## Example Usage
 

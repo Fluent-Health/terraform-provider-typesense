@@ -3,12 +3,12 @@
 page_title: "typesense_nl_search_model Resource - typesense"
 subcategory: ""
 description: |-
-  A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM.
+  A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM. See the Typesense API docs https://typesense.org/docs/30.2/api/natural-language-search.html.
 ---
 
 # typesense_nl_search_model (Resource)
 
-A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM.
+A Natural Language Search model (Typesense v29+). Translates a free-form query string into a structured Typesense search request via an LLM. See the [Typesense API docs](https://typesense.org/docs/30.2/api/natural-language-search.html).
 
 ## Example Usage
 

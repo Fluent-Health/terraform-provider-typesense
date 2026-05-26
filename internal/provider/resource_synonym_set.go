@@ -45,7 +45,7 @@ func (r *SynonymSetResource) Metadata(ctx context.Context, req resource.Metadata
 
 func (r *SynonymSetResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A global synonym set (Typesense v30+). Collections opt in via the `synonym_sets` collection attribute. Replaces the legacy per-collection `typesense_synonym` resource that was removed in v30.",
+		MarkdownDescription: "A global synonym set (Typesense v30+). Collections opt in via the `synonym_sets` collection attribute. Replaces the legacy per-collection `typesense_synonym` resource that was removed in v30. See the [Typesense API docs](https://typesense.org/docs/30.2/api/synonyms.html).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -95,16 +95,7 @@ func (r *SynonymSetResource) Schema(ctx context.Context, req resource.SchemaRequ
 }
 
 func (r *SynonymSetResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func itemsToAPI(items []SynonymSetItemModel) []typesense.SynonymItem {

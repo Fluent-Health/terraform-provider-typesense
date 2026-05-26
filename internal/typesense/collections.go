@@ -87,6 +87,7 @@ type CollectionUpdateSchema struct {
 }
 
 // CreateCollection creates a new collection.
+// POST /collections — https://typesense.org/docs/30.2/api/collections.html#create-a-collection
 func (c *Client) CreateCollection(ctx context.Context, body *CollectionCreateSchema) (*Collection, error) {
 	out := &Collection{}
 	if err := c.do(ctx, "POST", "/collections", nil, body, out); err != nil {
@@ -96,6 +97,7 @@ func (c *Client) CreateCollection(ctx context.Context, body *CollectionCreateSch
 }
 
 // GetCollection retrieves a collection by name.
+// GET /collections/{name} — https://typesense.org/docs/30.2/api/collections.html#retrieve-a-collection
 func (c *Client) GetCollection(ctx context.Context, name string) (*Collection, error) {
 	out := &Collection{}
 	if err := c.do(ctx, "GET", "/collections/"+name, nil, nil, out); err != nil {
@@ -105,6 +107,7 @@ func (c *Client) GetCollection(ctx context.Context, name string) (*Collection, e
 }
 
 // UpdateCollection patches a collection's field set.
+// PATCH /collections/{name} — https://typesense.org/docs/30.2/api/collections.html#update-or-alter-a-collection
 func (c *Client) UpdateCollection(ctx context.Context, name string, body *CollectionUpdateSchema) (*CollectionUpdateSchema, error) {
 	out := &CollectionUpdateSchema{}
 	if err := c.do(ctx, "PATCH", "/collections/"+name, nil, body, out); err != nil {
@@ -114,6 +117,7 @@ func (c *Client) UpdateCollection(ctx context.Context, name string, body *Collec
 }
 
 // DeleteCollection drops a collection.
+// DELETE /collections/{name} — https://typesense.org/docs/30.2/api/collections.html#drop-a-collection
 func (c *Client) DeleteCollection(ctx context.Context, name string) error {
 	return c.do(ctx, "DELETE", "/collections/"+name, nil, nil, nil)
 }

@@ -18,6 +18,7 @@ type PresetUpsertSchema struct {
 }
 
 // UpsertPreset creates or replaces a preset.
+// PUT /presets/{name} — https://typesense.org/docs/30.2/api/search.html#presets
 func (c *Client) UpsertPreset(ctx context.Context, name string, body *PresetUpsertSchema) (*Preset, error) {
 	out := &Preset{}
 	if err := c.do(ctx, "PUT", "/presets/"+name, nil, body, out); err != nil {
@@ -27,6 +28,7 @@ func (c *Client) UpsertPreset(ctx context.Context, name string, body *PresetUpse
 }
 
 // GetPreset retrieves a preset by name.
+// GET /presets/{name} — https://typesense.org/docs/30.2/api/search.html#presets
 func (c *Client) GetPreset(ctx context.Context, name string) (*Preset, error) {
 	out := &Preset{}
 	if err := c.do(ctx, "GET", "/presets/"+name, nil, nil, out); err != nil {
@@ -36,6 +38,7 @@ func (c *Client) GetPreset(ctx context.Context, name string) (*Preset, error) {
 }
 
 // DeletePreset removes a preset.
+// DELETE /presets/{name} — https://typesense.org/docs/30.2/api/search.html#presets
 func (c *Client) DeletePreset(ctx context.Context, name string) error {
 	return c.do(ctx, "DELETE", "/presets/"+name, nil, nil, nil)
 }

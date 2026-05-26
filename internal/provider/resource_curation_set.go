@@ -71,7 +71,7 @@ func (r *CurationSetResource) Metadata(ctx context.Context, req resource.Metadat
 
 func (r *CurationSetResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A global curation set (Typesense v30+). Collections opt in via the `curation_sets` collection attribute. Replaces the per-collection overrides API removed in v30.",
+		MarkdownDescription: "A global curation set (Typesense v30+). Collections opt in via the `curation_sets` collection attribute. Replaces the per-collection overrides API removed in v30. See the [Typesense API docs](https://typesense.org/docs/30.2/api/curation.html).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -145,16 +145,7 @@ func (r *CurationSetResource) Schema(ctx context.Context, req resource.SchemaReq
 }
 
 func (r *CurationSetResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func curationItemsToAPI(items []CurationItemModel) []typesense.CurationItem {

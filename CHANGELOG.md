@@ -1,3 +1,16 @@
+# Unreleased (Fluent-Health fork)
+
+### Features
+
+* drop the `typesense-go` SDK and call the Typesense HTTP API directly via a new `internal/typesense` package. Removes a regen-cadence bottleneck and lets us expose server-supported fields the SDK is missing.
+* **collections (`embed.model_config`):** add `region` and `service_account` (with nested `client_email`, `private_key`, `token_uri`) — enables the GCP Vertex service-account auth path for embedders like LOINC/SNOMED.
+* **collections (`fields`):** add `async_reference` for fields that have a `reference`; lets documents index before the referenced document exists.
+
+### Internal
+
+* extract a shared `configureClient` helper to remove ~130 lines of boilerplate from per-resource `Configure` methods.
+* add httptest-based unit tests for the new HTTP client (happy-path, 404 → `IsNotFound`, JSON error-body parsing).
+
 # [2.7.0](https://github.com/ronati/terraform-provider-typesense/compare/v2.6.0...v2.7.0) (2026-02-20)
 
 

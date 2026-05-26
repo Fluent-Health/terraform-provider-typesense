@@ -45,7 +45,7 @@ func (r *ApiKeyResource) Metadata(ctx context.Context, req resource.MetadataRequ
 
 func (r *ApiKeyResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "API Key resource for accessing Typesense collections with specific permissions",
+		MarkdownDescription: "API Key resource for accessing Typesense collections with specific permissions. See the [Typesense API docs](https://typesense.org/docs/30.2/api/api-keys.html).",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -106,21 +106,7 @@ func (r *ApiKeyResource) Schema(ctx context.Context, req resource.SchemaRequest,
 }
 
 func (r *ApiKeyResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-
-	client, ok := req.ProviderData.(*typesense.Client)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-		return
-	}
-
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {

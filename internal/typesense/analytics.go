@@ -40,6 +40,7 @@ type AnalyticsRuleUpdate struct {
 }
 
 // CreateAnalyticsRules submits one or more rule creates and returns the parsed rules.
+// POST /analytics/rules — https://typesense.org/docs/30.2/api/analytics-query-suggestions.html#create-an-analytics-rule
 func (c *Client) CreateAnalyticsRules(ctx context.Context, rules []AnalyticsRuleCreate) ([]AnalyticsRule, error) {
 	var out []AnalyticsRule
 	if err := c.do(ctx, "POST", "/analytics/rules", nil, rules, &out); err != nil {
@@ -49,6 +50,7 @@ func (c *Client) CreateAnalyticsRules(ctx context.Context, rules []AnalyticsRule
 }
 
 // GetAnalyticsRule retrieves an analytics rule by name.
+// GET /analytics/rules/{name} — https://typesense.org/docs/30.2/api/analytics-query-suggestions.html#retrieve-an-analytics-rule
 func (c *Client) GetAnalyticsRule(ctx context.Context, name string) (*AnalyticsRule, error) {
 	out := &AnalyticsRule{}
 	if err := c.do(ctx, "GET", "/analytics/rules/"+name, nil, nil, out); err != nil {
@@ -58,6 +60,7 @@ func (c *Client) GetAnalyticsRule(ctx context.Context, name string) (*AnalyticsR
 }
 
 // UpdateAnalyticsRule patches an analytics rule.
+// PATCH /analytics/rules/{name} — https://typesense.org/docs/30.2/api/analytics-query-suggestions.html#update-an-analytics-rule
 func (c *Client) UpdateAnalyticsRule(ctx context.Context, name string, body *AnalyticsRuleUpdate) (*AnalyticsRule, error) {
 	out := &AnalyticsRule{}
 	if err := c.do(ctx, "PATCH", "/analytics/rules/"+name, nil, body, out); err != nil {
@@ -67,6 +70,7 @@ func (c *Client) UpdateAnalyticsRule(ctx context.Context, name string, body *Ana
 }
 
 // DeleteAnalyticsRule removes an analytics rule.
+// DELETE /analytics/rules/{name} — https://typesense.org/docs/30.2/api/analytics-query-suggestions.html#delete-an-analytics-rule
 func (c *Client) DeleteAnalyticsRule(ctx context.Context, name string) error {
 	return c.do(ctx, "DELETE", "/analytics/rules/"+name, nil, nil, nil)
 }

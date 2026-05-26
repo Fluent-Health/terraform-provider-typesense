@@ -53,7 +53,7 @@ func (r *AnalyticsRuleResource) Metadata(ctx context.Context, req resource.Metad
 
 func (r *AnalyticsRuleResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "An analytics rule (Typesense v30+ shape). Aggregates events from a source collection into a destination collection.",
+		MarkdownDescription: "An analytics rule (Typesense v30+ shape). Aggregates events from a source collection into a destination collection. See the [Typesense API docs](https://typesense.org/docs/30.2/api/analytics-query-suggestions.html).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -125,16 +125,7 @@ func (r *AnalyticsRuleResource) Schema(ctx context.Context, req resource.SchemaR
 }
 
 func (r *AnalyticsRuleResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func paramsModelToAPI(p *AnalyticsRuleParamsModel) *typesense.AnalyticsRuleParams {

@@ -38,7 +38,7 @@ func (r *StopwordResource) Metadata(ctx context.Context, req resource.MetadataRe
 
 func (r *StopwordResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A stopwords set is a named list of common words removed from search queries that reference this set via the `stopwords` search parameter.",
+		MarkdownDescription: "A stopwords set is a named list of common words removed from search queries that reference this set via the `stopwords` search parameter. See the [Typesense API docs](https://typesense.org/docs/30.2/api/stopwords.html).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -65,16 +65,7 @@ func (r *StopwordResource) Schema(ctx context.Context, req resource.SchemaReques
 }
 
 func (r *StopwordResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *StopwordResource) upsert(ctx context.Context, data *StopwordResourceModel) error {

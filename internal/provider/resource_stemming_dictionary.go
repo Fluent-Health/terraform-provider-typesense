@@ -43,7 +43,7 @@ func (r *StemmingDictionaryResource) Metadata(ctx context.Context, req resource.
 
 func (r *StemmingDictionaryResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A custom stemming dictionary that maps surface word forms to a root form. **Note:** Typesense does not currently expose an HTTP DELETE for stemming dictionaries; `terraform destroy` removes the resource from state and emits a warning, but the dictionary remains on the server until it is overwritten or the server data is wiped.",
+		MarkdownDescription: "A custom stemming dictionary that maps surface word forms to a root form. See the [Typesense API docs](https://typesense.org/docs/30.2/api/stemming.html). **Note:** Typesense does not currently expose an HTTP DELETE for stemming dictionaries; `terraform destroy` removes the resource from state and emits a warning, but the dictionary remains on the server until it is overwritten or the server data is wiped.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -78,16 +78,7 @@ func (r *StemmingDictionaryResource) Schema(ctx context.Context, req resource.Sc
 }
 
 func (r *StemmingDictionaryResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*typesense.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *typesense.Client, got: %T.", req.ProviderData))
-		return
-	}
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *StemmingDictionaryResource) upsert(ctx context.Context, data *StemmingDictionaryResourceModel) error {

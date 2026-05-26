@@ -40,6 +40,7 @@ type ConversationModelUpdateSchema struct {
 }
 
 // CreateConversationModel creates a conversation model.
+// POST /conversations/models — https://typesense.org/docs/30.2/api/conversational-search-rag.html#create-a-conversation-model
 func (c *Client) CreateConversationModel(ctx context.Context, body *ConversationModelCreateSchema) (*ConversationModel, error) {
 	out := &ConversationModel{}
 	if err := c.do(ctx, "POST", "/conversations/models", nil, body, out); err != nil {
@@ -49,6 +50,7 @@ func (c *Client) CreateConversationModel(ctx context.Context, body *Conversation
 }
 
 // GetConversationModel retrieves a conversation model.
+// GET /conversations/models/{id} — https://typesense.org/docs/30.2/api/conversational-search-rag.html#retrieve-a-conversation-model
 func (c *Client) GetConversationModel(ctx context.Context, id string) (*ConversationModel, error) {
 	out := &ConversationModel{}
 	if err := c.do(ctx, "GET", "/conversations/models/"+id, nil, nil, out); err != nil {
@@ -58,6 +60,7 @@ func (c *Client) GetConversationModel(ctx context.Context, id string) (*Conversa
 }
 
 // UpdateConversationModel replaces an existing conversation model's settings.
+// PUT /conversations/models/{id} — https://typesense.org/docs/30.2/api/conversational-search-rag.html#update-a-conversation-model
 func (c *Client) UpdateConversationModel(ctx context.Context, id string, body *ConversationModelUpdateSchema) (*ConversationModel, error) {
 	out := &ConversationModel{}
 	if err := c.do(ctx, "PUT", "/conversations/models/"+id, nil, body, out); err != nil {
@@ -67,6 +70,7 @@ func (c *Client) UpdateConversationModel(ctx context.Context, id string, body *C
 }
 
 // DeleteConversationModel removes a conversation model.
+// DELETE /conversations/models/{id} — https://typesense.org/docs/30.2/api/conversational-search-rag.html#delete-a-conversation-model
 func (c *Client) DeleteConversationModel(ctx context.Context, id string) error {
 	return c.do(ctx, "DELETE", "/conversations/models/"+id, nil, nil, nil)
 }

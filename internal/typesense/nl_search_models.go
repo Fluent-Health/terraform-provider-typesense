@@ -48,6 +48,7 @@ type NLSearchModelUpsertSchema struct {
 }
 
 // CreateNLSearchModel creates an NL search model.
+// POST /nl_search_models — https://typesense.org/docs/30.2/api/natural-language-search.html#create-a-natural-language-search-model
 func (c *Client) CreateNLSearchModel(ctx context.Context, body *NLSearchModelUpsertSchema) (*NLSearchModel, error) {
 	out := &NLSearchModel{}
 	if err := c.do(ctx, "POST", "/nl_search_models", nil, body, out); err != nil {
@@ -57,6 +58,7 @@ func (c *Client) CreateNLSearchModel(ctx context.Context, body *NLSearchModelUps
 }
 
 // GetNLSearchModel retrieves an NL search model.
+// GET /nl_search_models/{id} — https://typesense.org/docs/30.2/api/natural-language-search.html#retrieve-a-natural-language-search-model
 func (c *Client) GetNLSearchModel(ctx context.Context, id string) (*NLSearchModel, error) {
 	out := &NLSearchModel{}
 	if err := c.do(ctx, "GET", "/nl_search_models/"+id, nil, nil, out); err != nil {
@@ -66,6 +68,7 @@ func (c *Client) GetNLSearchModel(ctx context.Context, id string) (*NLSearchMode
 }
 
 // UpdateNLSearchModel replaces an existing NL search model's settings.
+// PUT /nl_search_models/{id} — https://typesense.org/docs/30.2/api/natural-language-search.html#update-a-natural-language-search-model
 func (c *Client) UpdateNLSearchModel(ctx context.Context, id string, body *NLSearchModelUpsertSchema) (*NLSearchModel, error) {
 	out := &NLSearchModel{}
 	if err := c.do(ctx, "PUT", "/nl_search_models/"+id, nil, body, out); err != nil {
@@ -75,6 +78,7 @@ func (c *Client) UpdateNLSearchModel(ctx context.Context, id string, body *NLSea
 }
 
 // DeleteNLSearchModel removes an NL search model.
+// DELETE /nl_search_models/{id} — https://typesense.org/docs/30.2/api/natural-language-search.html#delete-a-natural-language-search-model
 func (c *Client) DeleteNLSearchModel(ctx context.Context, id string) error {
 	return c.do(ctx, "DELETE", "/nl_search_models/"+id, nil, nil, nil)
 }

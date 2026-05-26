@@ -3,12 +3,12 @@
 page_title: "typesense_conversation_model Resource - typesense"
 subcategory: ""
 description: |-
-  A conversation model configures Typesense's RAG-style conversational search. References an external LLM (OpenAI, Cloudflare, vLLM) and the Typesense collection that stores chat history.
+  A conversation model configures Typesense's RAG-style conversational search. References an external LLM (OpenAI, Cloudflare, vLLM) and the Typesense collection that stores chat history. See the Typesense API docs https://typesense.org/docs/30.2/api/conversational-search-rag.html.
 ---
 
 # typesense_conversation_model (Resource)
 
-A conversation model configures Typesense's RAG-style conversational search. References an external LLM (OpenAI, Cloudflare, vLLM) and the Typesense collection that stores chat history.
+A conversation model configures Typesense's RAG-style conversational search. References an external LLM (OpenAI, Cloudflare, vLLM) and the Typesense collection that stores chat history. See the [Typesense API docs](https://typesense.org/docs/30.2/api/conversational-search-rag.html).
 
 ## Example Usage
 

@@ -17,6 +17,7 @@ type SynonymSet struct {
 }
 
 // UpsertSynonymSet creates or replaces a synonym set.
+// PUT /synonym_sets/{name} — https://typesense.org/docs/30.2/api/synonyms.html#create-or-update-a-synonym-set
 func (c *Client) UpsertSynonymSet(ctx context.Context, name string, body *SynonymSet) (*SynonymSet, error) {
 	out := &SynonymSet{}
 	if err := c.do(ctx, "PUT", "/synonym_sets/"+name, nil, body, out); err != nil {
@@ -26,6 +27,7 @@ func (c *Client) UpsertSynonymSet(ctx context.Context, name string, body *Synony
 }
 
 // GetSynonymSet retrieves a synonym set by name.
+// GET /synonym_sets/{name} — https://typesense.org/docs/30.2/api/synonyms.html#retrieve-a-synonym-set
 func (c *Client) GetSynonymSet(ctx context.Context, name string) (*SynonymSet, error) {
 	out := &SynonymSet{}
 	if err := c.do(ctx, "GET", "/synonym_sets/"+name, nil, nil, out); err != nil {
@@ -35,6 +37,7 @@ func (c *Client) GetSynonymSet(ctx context.Context, name string) (*SynonymSet, e
 }
 
 // DeleteSynonymSet removes a synonym set.
+// DELETE /synonym_sets/{name} — https://typesense.org/docs/30.2/api/synonyms.html#delete-a-synonym-set
 func (c *Client) DeleteSynonymSet(ctx context.Context, name string) error {
 	return c.do(ctx, "DELETE", "/synonym_sets/"+name, nil, nil, nil)
 }

@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -42,7 +41,7 @@ func (r *DocumentResource) Metadata(ctx context.Context, req resource.MetadataRe
 
 func (r *DocumentResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Every record you index in Typesense is called a Document",
+		MarkdownDescription: "Every record you index in Typesense is called a Document. See the [Typesense API docs](https://typesense.org/docs/30.2/api/documents.html).",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -76,23 +75,7 @@ func (r *DocumentResource) Schema(ctx context.Context, req resource.SchemaReques
 }
 
 func (r *DocumentResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	client, ok := req.ProviderData.(*typesense.Client)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *DocumentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -226,19 +209,9 @@ func (r *DocumentResource) Update(ctx context.Context, req resource.UpdateReques
 
 	document["id"] = id
 
-	result, err := r.client.UpdateDocument(ctx, collectionName, id, document, nil)
-	_ = result // result is empty
-
-	if err != nil {
-
-		// check if error contains 201 response
-		if strings.Contains(err.Error(), "201") {
-			// ignore, sometimes typesense returns 201 code
-		} else {
-			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update document, got error: %s", err))
-			return
-		}
-
+	if _, err := r.client.UpdateDocument(ctx, collectionName, id, document, nil); err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update document, got error: %s", err))
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

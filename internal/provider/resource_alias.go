@@ -39,7 +39,7 @@ func (r *AliasResource) Metadata(ctx context.Context, req resource.MetadataReque
 
 func (r *AliasResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "An alias is a virtual collection name that points to a real collection. If you're familiar with symbolic links on Linux, it's very similar to that.",
+		MarkdownDescription: "An alias is a virtual collection name that points to a real collection. If you're familiar with symbolic links on Linux, it's very similar to that. See the [Typesense API docs](https://typesense.org/docs/30.2/api/collection-alias.html).",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -68,23 +68,7 @@ func (r *AliasResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 }
 
 func (r *AliasResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	client, ok := req.ProviderData.(*typesense.Client)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
-
-		return
-	}
-
-	r.client = client
+	r.client = configureClient(req, resp)
 }
 
 func (r *AliasResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
