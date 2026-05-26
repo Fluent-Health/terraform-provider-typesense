@@ -680,6 +680,65 @@ func TestFlattenFieldEmbed_NoPriorOrUnknownPriorAcceptsServerMasked(t *testing.T
 	}
 }
 
+// TestFieldsEqual_PostImportNullStateMatchesUnknownPlan: complement to
+// the v2.0.5 ServerEchoedEmptyStringMatchesUnknownPlan case. Some
+// Typesense instances (observed on test env, Typesense 30.1) omit
+// client_id / indexing_prefix / query_prefix / url from the GET
+// response entirely instead of echoing "". flattenCollectionFields
+// then stores null in state. Plan still resolves the Optional+Computed
+// slots to Unknown. reflect.DeepEqual sees Null != Unknown, fieldsEqual
+// returns false, Update queues drop+add — every document re-embedded.
+// PM-3851: this is what hit the test-env apply with v2.0.7. The
+// equivalent v2.0.5 absorb is fillIfStateNonNullPlanUnknown, which
+// stops on the `!state.IsNull()` guard and never fires for these
+// imports.
+func TestFieldsEqual_PostImportNullStateMatchesUnknownPlan(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name:   types.StringValue("embedding"),
+		Type:   types.StringValue("float[]"),
+		NumDim: types.Int64Value(3072),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/gemini-embedding-001"),
+				// Server didn't echo these — null, not "".
+				ClientId:       types.StringNull(),
+				IndexingPrefix: types.StringNull(),
+				QueryPrefix:    types.StringNull(),
+				Url:            types.StringNull(),
+				ProjectId:      types.StringValue("fh-test-svc"),
+				Region:         types.StringValue("asia-south1"),
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					ClientEmail: types.StringValue("search-cluster-runner@fh-test-svc.iam.gserviceaccount.com"),
+				},
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName:      types.StringValue("gcp/gemini-embedding-001"),
+				ClientId:       types.StringUnknown(), // Optional+Computed, HCL unset
+				IndexingPrefix: types.StringUnknown(),
+				QueryPrefix:    types.StringUnknown(),
+				Url:            types.StringUnknown(),
+				ProjectId:      types.StringValue("fh-test-svc"),
+				Region:         types.StringValue("asia-south1"),
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					ClientEmail: types.StringValue("search-cluster-runner@fh-test-svc.iam.gserviceaccount.com"),
+					PrivateKey:  types.StringValue("real-pk"),
+				},
+			},
+		},
+	}
+	if !fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be true when state has null for Optional+Computed model_config fields the server didn't echo and plan has Unknown for the same fields; got false — would trigger drop+add re-embed")
+	}
+}
+
 // TestFlattenFieldEmbed_RealServerValueOverridesPrior: symmetric guard.
 // When the server returns a real, non-masked value that differs from
 // prior, the server wins. Otherwise external edits made directly via

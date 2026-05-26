@@ -1041,17 +1041,18 @@ func preserveFromPriorIfServerMasked(d *types.String, priorVal types.String) {
 //     five or more consecutive asterisks (Typesense's shortest observed
 //     redaction).
 //
-//  4. Server-echoed Optional+Computed embed.model_config fields
-//     (client_id, indexing_prefix, project_id, query_prefix, url):
-//     Typesense returns these as concrete strings (often "") even when
-//     HCL never set them. State picks up the concrete value via flatten;
-//     plan resolves them to Unknown (Optional+Computed without
-//     UseStateForUnknown). Treat state-non-null vs plan-Unknown as equal
-//     — the framework would have resolved Unknown to "use whatever the
-//     server returns", which is what state already holds. Doing this in
-//     the equivalence layer instead of via UseStateForUnknown at the
-//     schema layer avoids writing masked credentials back to the server
-//     on a real, unrelated Update.
+//  4. Server-echoed-or-omitted Optional+Computed embed.model_config
+//     fields (client_id, indexing_prefix, project_id, query_prefix,
+//     url): Typesense's GET response for these is inconsistent across
+//     instances — some echo "", some echo masked strings (covered by
+//     case 3), some omit the key entirely (state ends up null). HCL
+//     rarely sets them, so plan resolves to Unknown (Optional+Computed
+//     without UseStateForUnknown). Treat any plan-Unknown as equal to
+//     whatever state holds — the framework would have resolved Unknown
+//     to the server's value after apply anyway, and that's what state
+//     already reflects. Doing this in the equivalence layer instead of
+//     via UseStateForUnknown at the schema layer avoids writing masked
+//     credentials back to the server on a real, unrelated Update.
 //
 // The asymmetries are deliberately one-directional. For sensitive fields,
 // state-null vs plan-non-null is the post-import gap (suppress); but
@@ -1063,9 +1064,9 @@ func preserveFromPriorIfServerMasked(d *types.String, priorVal types.String) {
 // state-masked vs plan-non-null/Unknown is the round-trip-through-server
 // case (suppress); but state-unmasked vs plan-different-non-null is a
 // genuine config change (do not suppress). For server-echoed
-// Optional+Computed fields, state-non-null vs plan-Unknown is the
-// HCL-leaves-it-to-the-server case (suppress); but state-non-null vs
-// plan-different-non-null is a user-driven set (do not suppress).
+// Optional+Computed fields, plan-Unknown is the HCL-leaves-it-to-
+// the-server case (suppress regardless of state); but plan-non-null-
+// and-different is a user-driven set (do not suppress).
 func fieldsEqual(state, plan CollectionResourceFieldModel) bool {
 	return reflect.DeepEqual(absorbPostImportSensitive(state, plan), plan)
 }
@@ -1117,27 +1118,32 @@ func absorbPostImportSensitive(state, plan CollectionResourceFieldModel) Collect
 	fillIfStateRedacted(&cfgCopy.ClientId, plan.Embed.ModelConfig.ClientId)
 	fillIfStateRedacted(&cfgCopy.ProjectId, plan.Embed.ModelConfig.ProjectId)
 
-	// Server-echoed Optional+Computed model_config fields. Typesense's
-	// GET returns these populated (often as empty strings, e.g.
-	// indexing_prefix="", or as the masked values handled above). HCL
-	// rarely sets them, so the framework resolves plan to Unknown
+	// Server-echoed-or-omitted Optional+Computed model_config fields.
+	// Typesense's GET response for these is inconsistent: some
+	// instances echo "" (observed on dev), others omit the key entirely
+	// (observed on test). State picks up "" or null respectively. HCL
+	// rarely sets these, so the framework resolves plan to Unknown
 	// (Optional+Computed without UseStateForUnknown). Without this
-	// absorb, state-"" vs plan-Unknown would trip reflect.DeepEqual and
-	// fire drop+add even after the masking absorb runs. UseStateForUnknown
-	// at the schema layer would have the same effect, but copying the
-	// state value into plan risks writing masked credentials back to the
-	// server on a real Update — keeping the bridging here in the
-	// equivalence layer avoids that.
-	fillIfStateNonNullPlanUnknown := func(s *types.String, p types.String) {
-		if !s.IsNull() && p.IsUnknown() {
+	// absorb, both state-"" vs plan-Unknown AND state-null vs
+	// plan-Unknown would trip reflect.DeepEqual and fire drop+add even
+	// after the masking absorb runs.
+	//
+	// We treat any plan-Unknown as equal to whatever state holds — the
+	// framework would have resolved Unknown to the server's value after
+	// apply anyway, and that's what state already reflects. Doing this
+	// in the equivalence layer instead of via UseStateForUnknown at the
+	// schema layer avoids writing masked credentials back to the
+	// server on a real, unrelated Update.
+	fillIfPlanUnknown := func(s *types.String, p types.String) {
+		if p.IsUnknown() {
 			*s = p
 		}
 	}
-	fillIfStateNonNullPlanUnknown(&cfgCopy.ClientId, plan.Embed.ModelConfig.ClientId)
-	fillIfStateNonNullPlanUnknown(&cfgCopy.IndexingPrefix, plan.Embed.ModelConfig.IndexingPrefix)
-	fillIfStateNonNullPlanUnknown(&cfgCopy.ProjectId, plan.Embed.ModelConfig.ProjectId)
-	fillIfStateNonNullPlanUnknown(&cfgCopy.QueryPrefix, plan.Embed.ModelConfig.QueryPrefix)
-	fillIfStateNonNullPlanUnknown(&cfgCopy.Url, plan.Embed.ModelConfig.Url)
+	fillIfPlanUnknown(&cfgCopy.ClientId, plan.Embed.ModelConfig.ClientId)
+	fillIfPlanUnknown(&cfgCopy.IndexingPrefix, plan.Embed.ModelConfig.IndexingPrefix)
+	fillIfPlanUnknown(&cfgCopy.ProjectId, plan.Embed.ModelConfig.ProjectId)
+	fillIfPlanUnknown(&cfgCopy.QueryPrefix, plan.Embed.ModelConfig.QueryPrefix)
+	fillIfPlanUnknown(&cfgCopy.Url, plan.Embed.ModelConfig.Url)
 
 	switch {
 	case cfgCopy.ServiceAccount == nil && plan.Embed.ModelConfig.ServiceAccount != nil:
