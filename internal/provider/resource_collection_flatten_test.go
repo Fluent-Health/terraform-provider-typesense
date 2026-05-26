@@ -391,3 +391,203 @@ func TestFieldsEqual_NumDimAbsorbDoesNotFireWhenPlanRemovesEmbed(t *testing.T) {
 		t.Errorf("fieldsEqual should be false when plan removes the embed block; got true — user's structural change would silently fail to reach the server")
 	}
 }
+
+// TestFieldsEqual_PostImportServerMaskedFieldsMatchRealPlan: Typesense's
+// GET /collections/{name} response masks credential-like fields inside
+// embed.model_config — observed on Typesense 30.1 returning values like:
+//
+//	"project_id":   "fh-de*****"
+//	"client_id":    "***********"
+//	"service_account": { "client_email": "searc***********" }
+//
+// Each is "first 5 chars of original + asterisks" (or all asterisks if
+// the original was short). The provider's flatten copies these masked
+// strings into state. Plan carries the user's real values for fields
+// HCL sets (project_id, client_email) and Unknown for Optional+Computed
+// fields HCL doesn't set (client_id). reflect.DeepEqual then sees
+// state-masked != plan-real/Unknown, fieldsEqual returns false, Update
+// queues drop+add for the embedding field, and every document is
+// re-embedded. PM-3851: this is the bug observed after v2.0.4's num_dim
+// fix — re-embed still fires because the masked fields differ.
+//
+// The plan-side `types.StringUnknown()` on client_id mirrors what the
+// framework actually puts in req.Plan.Get() for an Optional+Computed
+// attribute with no plan modifier when HCL leaves it unset.
+func TestFieldsEqual_PostImportServerMaskedFieldsMatchRealPlan(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name:   types.StringValue("embedding"),
+		Type:   types.StringValue("float[]"),
+		NumDim: types.Int64Value(768),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/gemini-embedding-001"),
+				ProjectId: types.StringValue("fh-de*****"),  // server-masked
+				ClientId:  types.StringValue("***********"), // server-masked
+				Region:    types.StringValue("asia-south1"),
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					ClientEmail: types.StringValue("searc***********************"), // server-masked
+				},
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/gemini-embedding-001"),
+				ProjectId: types.StringValue("fh-dev-svc"),
+				ClientId:  types.StringUnknown(), // Optional+Computed, HCL unset
+				Region:    types.StringValue("asia-south1"),
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					ClientEmail: types.StringValue("vertex@fh-dev-svc.iam.gserviceaccount.com"),
+					PrivateKey:  types.StringValue("real-pk"),
+				},
+			},
+		},
+	}
+	if !fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be true when state has server-masked credential-like fields and plan has the real values (or Unknown for the Optional+Computed ones); got false — this would trigger a destructive drop+add re-embed")
+	}
+}
+
+// TestFieldsEqual_ServerEchoedEmptyStringMatchesUnknownPlan: orthogonal
+// to the masking case. Typesense's GET response populates several
+// Optional+Computed embed.model_config fields with empty strings even
+// when HCL never set them: indexing_prefix="", query_prefix="", url="".
+// State picks these up via flatten as non-null types.StringValue(""),
+// while plan resolves them to Unknown (Optional+Computed without
+// UseStateForUnknown plan modifier). reflect.DeepEqual sees ""!=Unknown
+// and triggers drop+add. Without this absorb the loinc/snomed apply
+// would re-embed even after the masking-aware fix above.
+func TestFieldsEqual_ServerEchoedEmptyStringMatchesUnknownPlan(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name:   types.StringValue("embedding"),
+		Type:   types.StringValue("float[]"),
+		NumDim: types.Int64Value(768),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName:      types.StringValue("gcp/gemini-embedding-001"),
+				ProjectId:      types.StringValue("fh-dev-svc"),
+				IndexingPrefix: types.StringValue(""), // server-echoed
+				QueryPrefix:    types.StringValue(""), // server-echoed
+				Url:            types.StringValue(""), // server-echoed
+				Region:         types.StringValue("asia-south1"),
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName:      types.StringValue("gcp/gemini-embedding-001"),
+				ProjectId:      types.StringValue("fh-dev-svc"),
+				IndexingPrefix: types.StringUnknown(), // Optional+Computed, HCL unset
+				QueryPrefix:    types.StringUnknown(), // Optional+Computed, HCL unset
+				Url:            types.StringUnknown(), // Optional+Computed, HCL unset
+				Region:         types.StringValue("asia-south1"),
+			},
+		},
+	}
+	if !fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be true when state has server-echoed empty strings and plan has Unknown on the same Optional+Computed embed.model_config fields; got false — would trigger drop+add re-embed")
+	}
+}
+
+// TestFieldsEqual_PlanRealValueOverridesServerEchoedState: complements
+// the test above. If the user *does* set one of the Optional+Computed
+// fields in HCL to a different value, plan carries the user's real
+// value (not Unknown), and the absorb must NOT fire — drop+add should
+// propagate so the new value reaches the server.
+func TestFieldsEqual_PlanRealValueOverridesServerEchoedState(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName:      types.StringValue("gcp/gemini-embedding-001"),
+				IndexingPrefix: types.StringValue(""),
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName:      types.StringValue("gcp/gemini-embedding-001"),
+				IndexingPrefix: types.StringValue("query: "), // user actually set one
+			},
+		},
+	}
+	if fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be false when plan has a real user-set value on an Optional+Computed field that differs from state's server-echoed value; got true — the user's HCL change would silently fail to reach the server")
+	}
+}
+
+// TestFieldsEqual_RealValueChangeStillTriggersUpdate: state and plan
+// both carry real (unmasked) values that genuinely differ — a user
+// pointing the embedder at a different GCP project. The masking absorb
+// must NOT fire here because there's no `*****` pattern in state; the
+// drop+add must propagate so the new project_id reaches the server.
+func TestFieldsEqual_RealValueChangeStillTriggersUpdate(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/gemini-embedding-001"),
+				ProjectId: types.StringValue("fh-dev-svc"),
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/gemini-embedding-001"),
+				ProjectId: types.StringValue("fh-prod-svc"),
+			},
+		},
+	}
+	if fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be false when project_id genuinely differs between state and plan; got true — real GCP-project change would silently fail to reach the server")
+	}
+}
+
+// TestFieldsEqual_MaskingDetectionRequiresFiveAsterisks: the masking
+// detector must use at least 5 consecutive asterisks (Typesense's
+// shortest observed redaction). A real value with fewer asterisks (very
+// unlikely but possible in some legacy GCP project names) must not be
+// treated as masked.
+func TestFieldsEqual_MaskingDetectionRequiresFiveAsterisks(t *testing.T) {
+	// State has "abc**" (only 2 asterisks); plan has a different value.
+	// Must be treated as a real change.
+	stateField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ProjectId: types.StringValue("abc**"),
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ProjectId: types.StringValue("real-value"),
+			},
+		},
+	}
+	if fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be false when state's '**' (2 asterisks) is treated as a real value, not Typesense masking which uses 5+ asterisks; got true")
+	}
+}
