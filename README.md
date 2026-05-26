@@ -14,7 +14,7 @@ A Terraform provider for managing [Typesense](https://typesense.org) collections
 ## Requirements
 
 - [Terraform](https://www.terraform.io/downloads.html) >= 0.12
-- [Go](https://golang.org/doc/install) 1.22+ (for building the provider)
+- [Go](https://golang.org/doc/install) 1.24+ (for building the provider)
 - [Typesense](https://typesense.org) server v30.0+ (uses the global `synonym_sets` and `curation_sets` endpoints introduced in v30)
 
 ## Building
