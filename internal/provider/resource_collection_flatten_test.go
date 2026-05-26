@@ -132,3 +132,161 @@ func TestFlattenFieldEmbed_PreservesServiceAccountBlockWhenServerOmits(t *testin
 		t.Errorf("client_email = %q, want preserved from prior", got.ModelConfig.ServiceAccount.ClientEmail.ValueString())
 	}
 }
+
+// TestFieldsEqual_PostImportNullStateMatchesNonNullPlan: the core regression
+// guard. State has null sensitive (because of import), plan has the user's
+// real values. fieldsEqual must return true so Update does NOT trigger
+// drop+add (which would re-embed the whole collection).
+func TestFieldsEqual_PostImportNullStateMatchesNonNullPlan(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/text-embedding-005"),
+				// All sensitive fields null (post-import).
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					ClientEmail: types.StringValue("vertex@my-proj.iam.gserviceaccount.com"),
+					// PrivateKey null — server didn't echo it.
+				},
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			From: []types.String{types.StringValue("title")},
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName:    types.StringValue("gcp/text-embedding-005"),
+				AccessToken:  types.StringValue("at"),
+				ApiKey:       types.StringValue("ak"),
+				ClientSecret: types.StringValue("cs"),
+				RefreshToken: types.StringValue("rt"),
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					ClientEmail: types.StringValue("vertex@my-proj.iam.gserviceaccount.com"),
+					PrivateKey:  types.StringValue("real-pk"),
+				},
+			},
+		},
+	}
+	if !fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be true when state has null sensitive and plan has real values (post-import case); got false — this would trigger a destructive drop+add re-embed")
+	}
+}
+
+// TestFieldsEqual_RotationDetected: user actively changes a sensitive value
+// post-import. State has the old value, plan has a new one. fieldsEqual
+// must return false so Update triggers drop+add and the new credential
+// reaches the server.
+func TestFieldsEqual_RotationDetected(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/text-embedding-005"),
+				ApiKey:    types.StringValue("old-key"),
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("gcp/text-embedding-005"),
+				ApiKey:    types.StringValue("new-key"),
+			},
+		},
+	}
+	if fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be false when state and plan have *different* non-null api_keys; got true — rotation would silently fail to reach the server")
+	}
+}
+
+// TestFieldsEqual_NonSensitiveDiffStillTriggersUpdate: state has null
+// sensitive (post-import) AND a different model_name. The non-sensitive
+// diff must still trigger drop+add so the actual change reaches the server.
+func TestFieldsEqual_NonSensitiveDiffStillTriggersUpdate(t *testing.T) {
+	stateField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("ts/clip-vit-b-p32"),
+			},
+		},
+	}
+	planField := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName:    types.StringValue("openai/text-embedding-3-small"),
+				ApiKey:       types.StringValue("ak"),
+				AccessToken:  types.StringValue("at"),
+				ClientSecret: types.StringValue("cs"),
+				RefreshToken: types.StringValue("rt"),
+			},
+		},
+	}
+	if fieldsEqual(stateField, planField) {
+		t.Errorf("fieldsEqual should be false when model_name differs (even alongside post-import sensitive nulls); got true — non-sensitive change would never reach the server")
+	}
+}
+
+// TestFieldsEqual_FullyEqual: standard case — state and plan match. Should
+// return true so Update doesn't fire spuriously.
+func TestFieldsEqual_FullyEqual(t *testing.T) {
+	f := CollectionResourceFieldModel{
+		Name: types.StringValue("embedding"),
+		Type: types.StringValue("float[]"),
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ModelName: types.StringValue("ts/clip-vit-b-p32"),
+				ApiKey:    types.StringValue("ak"),
+			},
+		},
+	}
+	if !fieldsEqual(f, f) {
+		t.Errorf("fieldsEqual should be true for identical state and plan")
+	}
+}
+
+// TestAbsorbPostImportSensitive_DoesNotMutateInputs: critical correctness
+// invariant — we deep-copy state's Embed/ModelConfig/ServiceAccount before
+// filling fields. Without that, fieldsEqual would silently corrupt the
+// caller's state map (which Update relies on for downstream iteration).
+func TestAbsorbPostImportSensitive_DoesNotMutateInputs(t *testing.T) {
+	state := CollectionResourceFieldModel{
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ApiKey: types.StringNull(),
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					PrivateKey: types.StringNull(),
+				},
+			},
+		},
+	}
+	plan := CollectionResourceFieldModel{
+		Embed: &CollectionFieldEmbedModel{
+			ModelConfig: &CollectionFieldEmbedModelConfigModel{
+				ApiKey: types.StringValue("ak"),
+				ServiceAccount: &CollectionFieldEmbedServiceAccountModel{
+					PrivateKey: types.StringValue("pk"),
+				},
+			},
+		},
+	}
+
+	_ = absorbPostImportSensitive(state, plan)
+
+	if !state.Embed.ModelConfig.ApiKey.IsNull() {
+		t.Errorf("state.Embed.ModelConfig.ApiKey was mutated to %q; absorb must not touch its inputs", state.Embed.ModelConfig.ApiKey.ValueString())
+	}
+	if !state.Embed.ModelConfig.ServiceAccount.PrivateKey.IsNull() {
+		t.Errorf("state.Embed.ModelConfig.ServiceAccount.PrivateKey was mutated to %q", state.Embed.ModelConfig.ServiceAccount.PrivateKey.ValueString())
+	}
+}
