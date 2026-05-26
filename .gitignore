@@ -34,3 +34,13 @@ website/vendor
 # Keep windows files with windows line endings
 *.winfile eol=crlf
 node_modules
+
+# Secrets / credentials — never commit
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+service-account*.json
+*-sa-key.json

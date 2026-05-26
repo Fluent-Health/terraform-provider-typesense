@@ -246,8 +246,8 @@ func (r *NLSearchModelResource) Update(ctx context.Context, req resource.UpdateR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// NLSearchModelUpdateSchema is an alias for NLSearchModelCreateSchema.
-	body := (*api.NLSearchModelUpdateSchema)(nlModelToCreateSchema(&data))
+	// NLSearchModelUpdateSchema is a Go type alias for NLSearchModelCreateSchema.
+	body := nlModelToCreateSchema(&data)
 	model, err := r.client.NLSearchModel(data.Id.ValueString()).Update(ctx, body)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update NL search model: %s", err))
