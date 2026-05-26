@@ -342,7 +342,7 @@ Please include in your PR description:
 
 Releases are automated using semantic versioning:
 
-1. **Commits are merged to `master`** via approved PRs
+1. **Commits are merged to `main`** via approved PRs
 2. **CI validates all commits** follow conventional commits
 3. **Semantic Release analyzes commits** and determines version bump:
    - `feat:` → minor version bump (0.X.0)

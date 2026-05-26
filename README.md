@@ -4,12 +4,13 @@
 
   <br><br>
 
-  [![Tests](https://github.com/ronati/terraform-provider-typesense/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/ronati/terraform-provider-typesense/actions/workflows/build-and-test.yml)
-  [![codecov](https://codecov.io/gh/ronati/terraform-provider-typesense/branch/master/graph/badge.svg)](https://codecov.io/gh/ronati/terraform-provider-typesense)
-  [![Go Report Card](https://goreportcard.com/badge/github.com/ronati/terraform-provider-typesense)](https://goreportcard.com/report/github.com/ronati/terraform-provider-typesense)
+  [![Tests](https://github.com/Fluent-Health/terraform-provider-typesense/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/Fluent-Health/terraform-provider-typesense/actions/workflows/build-and-test.yml)
+  [![Go Report Card](https://goreportcard.com/badge/github.com/Fluent-Health/terraform-provider-typesense)](https://goreportcard.com/report/github.com/Fluent-Health/terraform-provider-typesense)
 </div>
 
 <hr>
+
+> This repository is a **[Fluent Health](https://github.com/Fluent-Health)** fork of [ronati/terraform-provider-typesense](https://github.com/ronati/terraform-provider-typesense) (originally created by [Keisuke Yamashita](https://github.com/KeisukeYamashita)). It has been extended to target Typesense v30.1 and adds resources for synonym sets, curation sets, analytics rules, conversation models, NL search models, presets, stopwords, and stemming dictionaries.
 
 ## Support
 
@@ -21,14 +22,14 @@
 
 ## Building The Provider
 
-Clone repository to: `$GOPATH/src/github.com/ronati/terraform-provider-typesense`
+Clone repository to: `$GOPATH/src/github.com/Fluent-Health/terraform-provider-typesense`
 
 ```console
-$ mkdir -p $GOPATH/src/github.com/ronati; cd $GOPATH/src/github.com/ronati
-$ git clone git@github.com:ronati/terraform-provider-typesense
+$ mkdir -p $GOPATH/src/github.com/Fluent-Health; cd $GOPATH/src/github.com/Fluent-Health
+$ git clone git@github.com:Fluent-Health/terraform-provider-typesense
 Enter the provider directory and build the provider
 
-$ cd $GOPATH/src/github.com/ronati/terraform-provider-typesense
+$ cd $GOPATH/src/github.com/Fluent-Health/terraform-provider-typesense
 $ make build
 ```
 
@@ -81,7 +82,7 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/en/
 
 ```bash
 # Clone and setup
-git clone https://github.com/ronati/terraform-provider-typesense.git
+git clone https://github.com/Fluent-Health/terraform-provider-typesense.git
 cd terraform-provider-typesense
 npm install
 
@@ -120,4 +121,4 @@ See [GitHub Workflows Documentation](.github/workflows/README.md) for more detai
 
 ## Notes for Maintainers
 
-When you merge a PR from `beta` into `master` and it successfully publishes a new version on the `latest` channel, **don't forget to create a PR from `master` to `beta`**. This is mandatory for `semantic-release` to take it into account for next `beta` version.
+When you merge a PR from `beta` into `main` and it successfully publishes a new version on the `latest` channel, **don't forget to create a PR from `main` to `beta`**. This is mandatory for `semantic-release` to take it into account for next `beta` version.

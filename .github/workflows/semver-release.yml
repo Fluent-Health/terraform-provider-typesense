@@ -2,7 +2,7 @@ name: SemVer Release
 on:
   push:
     branches:
-      - master
+      - main
       - beta
 
 permissions:

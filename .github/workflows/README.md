@@ -62,7 +62,7 @@ This directory contains the CI/CD workflows for the Terraform Typesense Provider
 
 ### 2. SemVer Release (`semver-release.yml`)
 
-**Trigger:** Push to `master` or `beta` branches
+**Trigger:** Push to `main` or `beta` branches
 
 **Purpose:** Automatically creates releases using semantic versioning based on commit messages.
 
@@ -183,7 +183,7 @@ including Docker setup for Typesense.
 
 ### Release workflow doesn't trigger
 - Verify commit messages include proper types (feat/fix)
-- Check that you're pushing to `master` or `beta` branch
+- Check that you're pushing to `main` or `beta` branch
 - Ensure GitHub App credentials are configured correctly
 
 ## Additional Resources

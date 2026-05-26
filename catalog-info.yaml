@@ -1,0 +1,22 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: terraform-provider-typesense
+  description: Terraform provider for Typesense. Fluent Health fork of ronati/terraform-provider-typesense, extended for Typesense v30.1.
+  annotations:
+    github.com/project-slug: Fluent-Health/terraform-provider-typesense
+    backstage.io/source-location: url:https://github.com/Fluent-Health/terraform-provider-typesense/tree/main/
+    fluentinhealth.com/oss: pending
+  tags:
+    - terraform
+    - typesense
+    - opensource
+  links:
+    - title: Upstream repository
+      url: https://github.com/ronati/terraform-provider-typesense
+    - title: Typesense
+      url: https://typesense.org
+spec:
+  type: library
+  lifecycle: production
+  owner: group:default/devops
