@@ -1,0 +1,22 @@
+site_name: terraform-provider-typesense
+site_description: Terraform provider for Typesense — Fluent Health fork of ronati/terraform-provider-typesense, extended for Typesense v30.1.
+
+nav:
+  - Home: index.md
+  - Resources:
+      - Alias: resources/alias.md
+      - Analytics Rule: resources/analytics_rule.md
+      - API Key: resources/api_key.md
+      - Collection: resources/collection.md
+      - Conversation Model: resources/conversation_model.md
+      - Curation Set: resources/curation_set.md
+      - Document: resources/document.md
+      - NL Search Model: resources/nl_search_model.md
+      - Preset: resources/preset.md
+      - Stemming Dictionary: resources/stemming_dictionary.md
+      - Stopword: resources/stopword.md
+      - Synonym Set: resources/synonym_set.md
+  - Plans:
+      - Typesense v30 Upgrade: superpowers/plans/2026-05-25-typesense-v30-upgrade.md
+  - Specs:
+      - Typesense v30 Upgrade Design: superpowers/specs/2026-05-25-typesense-v30-upgrade-design.md
