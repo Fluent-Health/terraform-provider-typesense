@@ -2,6 +2,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: terraform-provider-typesense
+  title: Terraform Provider for Typesense
   description: Terraform provider for Typesense. Fluent Health fork of ronati/terraform-provider-typesense, extended for Typesense v30.1.
   annotations:
     github.com/project-slug: Fluent-Health/terraform-provider-typesense
