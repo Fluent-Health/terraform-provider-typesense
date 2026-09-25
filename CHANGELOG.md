@@ -1,5 +1,14 @@
 # Unreleased (Fluent-Health fork)
 
+### Bug Fixes
+
+* **collections:** a field change whose `PATCH` outlives its HTTP request (gateway 504/408/502, client timeout, dropped connection) no longer fails the apply while Typesense finishes the alter server-side. The provider now polls `GET /operations/schema_changes` until the alter is done, checks the live schema against the plan, and records the planned values (including write-only embed credentials) in state. Before this, a timed-out re-index left state behind the server, so every later plan showed the same diff and every apply started the whole alter again.
+* **collections:** a `PATCH` refused with 422 "Another collection update operation is in progress" now waits for the running alter, re-diffs against the live schema, and retries once, instead of failing.
+
+### Features
+
+* **provider:** `request_timeout` (default `5m`) and `schema_change_timeout` (default `60m`) settings.
+
 ### Features
 
 * drop the `typesense-go` SDK and call the Typesense HTTP API directly via a new `internal/typesense` package. Removes a regen-cadence bottleneck and lets us expose server-supported fields the SDK is missing.

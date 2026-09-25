@@ -58,6 +58,12 @@ The provider needs two values:
 
 Either inline or via env vars — env vars take precedence in CI/CD pipelines so you don't have to thread secrets through Terraform variables.
 
+## Long-running schema changes
+
+Changing a field on a large collection (especially re-adding an auto-embedded field) can take far longer than a load balancer or proxy will hold the request open. Typesense keeps running the alter after the connection is gone, so the provider does not treat that as a failure: when a collection `PATCH` ends in a 504/408/502, a client timeout or a dropped connection, it polls `GET /operations/schema_changes` until the alter is done, checks that the live schema has the planned field names, types and embed blocks, and records the planned values in state. When a `PATCH` is refused with 422 "Another collection update operation is in progress", it waits for that alter, re-diffs against the live schema and sends what is still needed once.
+
+`schema_change_timeout` (default `60m`) bounds the wait and `request_timeout` (default `5m`) bounds a single HTTP request. The post-alter check is structural: write-only embed credentials are never returned by the server, so a credential-only change is taken as applied once the alter completes.
+
 ## Resources
 
 ### Collections & data

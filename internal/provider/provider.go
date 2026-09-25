@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
@@ -30,8 +32,25 @@ type TypesenseProvider struct {
 
 // TypesenseProviderModel is the provider implementation.
 type TypesenseProviderModel struct {
-	ApiKey     types.String `tfsdk:"api_key"`
-	ApiAddress types.String `tfsdk:"api_address"`
+	ApiKey              types.String `tfsdk:"api_key"`
+	ApiAddress          types.String `tfsdk:"api_address"`
+	RequestTimeout      types.String `tfsdk:"request_timeout"`
+	SchemaChangeTimeout types.String `tfsdk:"schema_change_timeout"`
+}
+
+// parseDurationAttribute parses an optional Go-duration provider attribute.
+// ok is false when the attribute is unset or invalid (invalid adds a diagnostic).
+func parseDurationAttribute(v types.String, p path.Path, resp *provider.ConfigureResponse) (time.Duration, bool) {
+	if v.IsNull() || v.IsUnknown() {
+		return 0, false
+	}
+	d, err := time.ParseDuration(v.ValueString())
+	if err != nil || d <= 0 {
+		resp.Diagnostics.AddAttributeError(p, "Invalid duration",
+			fmt.Sprintf("Expected a positive Go duration such as \"10m\", got %q.", v.ValueString()))
+		return 0, false
+	}
+	return d, true
 }
 
 func New(version string) func() provider.Provider {
@@ -60,6 +79,15 @@ func (p *TypesenseProvider) Schema(ctx context.Context, req provider.SchemaReque
 			"api_address": schema.StringAttribute{
 				Optional:    true,
 				Description: "URL of the Typesense server. This can also be set via the `TYPESENSE_API_ADDRESS` environment variable.",
+			},
+			"request_timeout": schema.StringAttribute{
+				Optional:    true,
+				Description: "Timeout for a single HTTP request to the Typesense server, as a Go duration (e.g. `10m`). Defaults to `5m`.",
+			},
+			"schema_change_timeout": schema.StringAttribute{
+				Optional: true,
+				Description: "How long to wait for a collection schema change to finish server-side after its PATCH request ended early " +
+					"(gateway timeout, dropped connection) or was refused because another change was running, as a Go duration (e.g. `90m`). Defaults to `60m`.",
 			},
 		},
 	}
@@ -112,11 +140,19 @@ func (p *TypesenseProvider) Configure(ctx context.Context, req provider.Configur
 		)
 	}
 
+	var opts []typesense.Option
+	if d, ok := parseDurationAttribute(data.RequestTimeout, path.Root("request_timeout"), resp); ok {
+		opts = append(opts, typesense.WithRequestTimeout(d))
+	}
+	if d, ok := parseDurationAttribute(data.SchemaChangeTimeout, path.Root("schema_change_timeout"), resp); ok {
+		opts = append(opts, typesense.WithSchemaChangeTimeout(d))
+	}
+
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	client := typesense.NewClient(api_address, api_key)
+	client := typesense.NewClient(api_address, api_key, opts...)
 
 	// Make the Typesense client available during DataSource and Resource
 	// type Configure methods.
