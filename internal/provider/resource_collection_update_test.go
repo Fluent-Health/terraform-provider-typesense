@@ -144,6 +144,21 @@ func TestBuildCollectionUpdateSchema_KeyRotationIsDropAndAddOfTheEmbedField(t *t
 	}
 }
 
+func TestBuildCollectionUpdateSchema_StateWithMaskedCredentialsSendsNothing(t *testing.T) {
+	// State refreshed from the server with no prior value for the embed field
+	// (e.g. the field was added by a PATCH that outlived its request) holds the
+	// server's masked project_id/client_email and no private_key. The plan
+	// carries real values; the server already has them, so there is nothing
+	// to send — Update only has to record the plan.
+	state := flattenCollectionFields(liveFields(true), nil)
+	plan := fieldModels(liveFields(true), "new-key")
+	plan[1].Embed.ModelConfig.ProjectId = types.StringValue("proj-real")
+
+	if got := buildCollectionUpdateSchema(context.Background(), state, plan); len(got.Fields) != 0 {
+		t.Fatalf("want no PATCH, got %+v", got.Fields)
+	}
+}
+
 func TestApplyCollectionUpdate_GatewayTimeoutThenAlterDrains(t *testing.T) {
 	f := &fakeTypesense{patchStatus: []int{http.StatusGatewayTimeout}, busyPolls: 4, live: liveFields(true)}
 	client := newFakeClient(t, f, time.Minute)
