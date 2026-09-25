@@ -610,58 +610,11 @@ func (r *CollectionResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	stateItems := make(map[string]CollectionResourceFieldModel)
-
-	for i := 0; i < len(state.Fields); i += 1 {
-		stateItems[state.Fields[i].Name.ValueString()] = state.Fields[i]
-	}
-
-	schema := &typesense.CollectionUpdateSchema{}
-
-	var drop = new(bool)
-	*drop = true
-
-	for _, field := range plan.Fields {
-		// item not exists, need to create
-		if _, ok := stateItems[field.Name.ValueString()]; !ok {
-			schema.Fields = append(schema.Fields, filedModelToApiField(field))
-
-			tflog.Info(ctx, "###Field will be created: "+field.Name.ValueString())
-
-		} else if !fieldsEqual(stateItems[field.Name.ValueString()], field) {
-			// item was changed, need to update
-
-			schema.Fields = append(schema.Fields,
-				typesense.Field{
-					Drop: drop,
-					Name: field.Name.ValueString(),
-				},
-				filedModelToApiField(field))
-			tflog.Info(ctx, "###Field will be updated: "+field.Name.ValueString())
-
-		} else {
-			// item was not changed, do nothing
-			tflog.Info(ctx, "###Field remaining the same: "+field.Name.ValueString())
-		}
-
-		// delete processed field from the state object
-		delete(stateItems, field.Name.ValueString())
-	}
-
-	for _, field := range stateItems {
-		schema.Fields = append(schema.Fields,
-			typesense.Field{
-				Drop: drop,
-				Name: field.Name.ValueString(),
-			})
-		tflog.Info(ctx, "###Field will be deleted: "+field.Name.ValueString())
-	}
+	schema := buildCollectionUpdateSchema(ctx, state.Fields, plan.Fields)
 
 	// Only call Typesense API if there are actual field changes
 	if len(schema.Fields) > 0 {
-		_, err := r.client.UpdateCollection(ctx, state.Id.ValueString(), schema)
-
-		if err != nil {
+		if err := applyCollectionUpdate(ctx, r.client, state.Id.ValueString(), schema, state.Fields, plan.Fields); err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update collection, got error: %s", err))
 			return
 		}

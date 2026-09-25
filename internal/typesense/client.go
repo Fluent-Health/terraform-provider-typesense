@@ -23,11 +23,23 @@ import (
 // server. Default chosen to cover the slowest realistic case.
 const defaultTimeout = 5 * time.Minute
 
+// DefaultSchemaChangeTimeout caps how long the provider waits for a collection
+// schema change (PATCH /collections/{name}) that outlived its HTTP request to
+// finish server-side. Re-indexing an embedded field over a large collection can
+// take tens of minutes.
+const DefaultSchemaChangeTimeout = 60 * time.Minute
+
+// defaultPollInterval is the gap between GET /operations/schema_changes polls.
+const defaultPollInterval = 10 * time.Second
+
 // Client is a thin wrapper around net/http for talking to a Typesense server.
 type Client struct {
 	baseURL string
 	apiKey  string
 	http    *http.Client
+
+	schemaChangeTimeout time.Duration
+	pollInterval        time.Duration
 }
 
 // Option configures a Client.
@@ -38,12 +50,29 @@ func WithHTTPClient(h *http.Client) Option {
 	return func(c *Client) { c.http = h }
 }
 
+// WithRequestTimeout overrides the per-request HTTP timeout.
+func WithRequestTimeout(d time.Duration) Option {
+	return func(c *Client) { c.http.Timeout = d }
+}
+
+// WithSchemaChangeTimeout overrides how long WaitForSchemaChange waits.
+func WithSchemaChangeTimeout(d time.Duration) Option {
+	return func(c *Client) { c.schemaChangeTimeout = d }
+}
+
+// WithPollInterval overrides the schema-change poll interval (mainly for tests).
+func WithPollInterval(d time.Duration) Option {
+	return func(c *Client) { c.pollInterval = d }
+}
+
 // NewClient builds a Client for the given Typesense server and API key.
 func NewClient(baseURL, apiKey string, opts ...Option) *Client {
 	c := &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		apiKey:  apiKey,
-		http:    &http.Client{Timeout: defaultTimeout},
+		baseURL:             strings.TrimRight(baseURL, "/"),
+		apiKey:              apiKey,
+		http:                &http.Client{Timeout: defaultTimeout},
+		schemaChangeTimeout: DefaultSchemaChangeTimeout,
+		pollInterval:        defaultPollInterval,
 	}
 	for _, o := range opts {
 		o(c)
