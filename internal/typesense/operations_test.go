@@ -78,7 +78,7 @@ func TestIsRequestOutlived(t *testing.T) {
 		{"502", &APIError{StatusCode: http.StatusBadGateway}, true},
 		{"400", &APIError{StatusCode: http.StatusBadRequest}, false},
 		{"422", &APIError{StatusCode: http.StatusUnprocessableEntity}, false},
-		{"cancelled", context.Canceled, false},
+		{"canceled", context.Canceled, false},
 		{"unexpected EOF", io.ErrUnexpectedEOF, true},
 		{"nil", nil, false},
 	} {
