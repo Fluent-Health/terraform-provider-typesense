@@ -4,6 +4,7 @@
 
 * **collections:** a field change whose `PATCH` outlives its HTTP request (gateway 504/408/502, client timeout, dropped connection) no longer fails the apply while Typesense finishes the alter server-side. The provider now polls `GET /operations/schema_changes` until the alter is done, checks the live schema against the plan, and records the planned values (including write-only embed credentials) in state. Before this, a timed-out re-index left state behind the server, so every later plan showed the same diff and every apply started the whole alter again.
 * **collections:** a `PATCH` refused with 422 "Another collection update operation is in progress" now waits for the running alter, re-diffs against the live schema, and retries once, instead of failing.
+* **collections (`embed.model_config`):** the computed embed attributes (`url`, `client_id`, `indexing_prefix`, `project_id`, `query_prefix`) now keep their prior state value through `UseStateForUnknown` instead of replanning as unknown. Before this, a plan that re-created an `embedding` field (for example a credential change that Typesense applies as a drop-and-add) replanned those attributes as `(known after apply)`, so the new `fields` set element failed to correlate and the apply failed with `Provider produced inconsistent result after apply` even though the alter had already landed server-side. Because the failing set element carried the embed credentials, they also appeared in the error output. The fix lets an embed change apply cleanly.
 
 ### Features
 

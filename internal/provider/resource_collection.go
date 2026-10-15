@@ -301,6 +301,9 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 											Optional:    true,
 											Computed:    true,
 											Description: "URL for remote embedding model",
+											PlanModifiers: []planmodifier.String{
+												stringplanmodifier.UseStateForUnknown(),
+											},
 										},
 										"access_token": schema.StringAttribute{
 											Optional:    true,
@@ -316,6 +319,9 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 											Optional:    true,
 											Computed:    true,
 											Description: "Client ID for OAuth",
+											PlanModifiers: []planmodifier.String{
+												stringplanmodifier.UseStateForUnknown(),
+											},
 										},
 										"client_secret": schema.StringAttribute{
 											Optional:    true,
@@ -326,16 +332,25 @@ func (r *CollectionResource) Schema(ctx context.Context, req resource.SchemaRequ
 											Optional:    true,
 											Computed:    true,
 											Description: "Prefix added to text during indexing",
+											PlanModifiers: []planmodifier.String{
+												stringplanmodifier.UseStateForUnknown(),
+											},
 										},
 										"project_id": schema.StringAttribute{
 											Optional:    true,
 											Computed:    true,
 											Description: "Project ID for cloud providers",
+											PlanModifiers: []planmodifier.String{
+												stringplanmodifier.UseStateForUnknown(),
+											},
 										},
 										"query_prefix": schema.StringAttribute{
 											Optional:    true,
 											Computed:    true,
 											Description: "Prefix added to text during querying",
+											PlanModifiers: []planmodifier.String{
+												stringplanmodifier.UseStateForUnknown(),
+											},
 										},
 										"refresh_token": schema.StringAttribute{
 											Optional:    true,
